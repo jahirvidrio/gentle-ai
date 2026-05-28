@@ -14,6 +14,7 @@ import (
 	"github.com/gentleman-programming/gentle-ai/internal/components/filemerge"
 	"github.com/gentleman-programming/gentle-ai/internal/components/skills"
 	"github.com/gentleman-programming/gentle-ai/internal/model"
+	"github.com/gentleman-programming/gentle-ai/internal/opencode"
 )
 
 type InjectionResult struct {
@@ -1690,19 +1691,26 @@ var claudeModelAssignmentRowOrder = []string{
 	"sdd-apply",
 	"sdd-verify",
 	"sdd-archive",
+	"jd-judge-a",
+	"jd-judge-b",
+	"jd-fix-agent",
 	"default",
 }
 
 var claudeModelAssignmentReasons = map[string]string{
-	"sdd-explore": "Reads code, structural - not architectural",
-	"sdd-propose": "Architectural decisions",
-	"sdd-spec":    "Structured writing",
-	"sdd-design":  "Architecture decisions",
-	"sdd-tasks":   "Mechanical breakdown",
-	"sdd-apply":   "Implementation",
-	"sdd-verify":  "Validation against spec",
-	"sdd-archive": "Copy and close",
-	"default":     "Non-SDD general delegation",
+	"orchestrator": "Coordinates, makes decisions",
+	"sdd-explore":  "Reads code, structural - not architectural",
+	"sdd-propose":  "Architectural decisions",
+	"sdd-spec":     "Structured writing",
+	"sdd-design":   "Architecture decisions",
+	"sdd-tasks":    "Mechanical breakdown",
+	"sdd-apply":    "Implementation",
+	"sdd-verify":   "Validation against spec",
+	"sdd-archive":  "Copy and close",
+	"jd-judge-a":   "Adversarial review — blind judge A",
+	"jd-judge-b":   "Adversarial review — blind judge B",
+	"jd-fix-agent": "Surgical fixes from confirmed issues",
+	"default":      "Non-SDD general delegation",
 }
 
 func injectClaudeModelAssignments(content string, assignments map[string]model.ClaudeModelAlias) (string, error) {
@@ -1763,6 +1771,26 @@ func renderClaudeModelAssignmentsSection(assignments map[string]model.ClaudeMode
 	return b.String()
 }
 
+// jdAgentSet is a package-level set for O(1) JD agent membership checks,
+// consistent with the sddPhaseSet pattern in read_assignments.go.
+var jdAgentSet = buildJDAgentSet()
+
+func buildJDAgentSet() map[string]bool {
+	phases := opencode.JDPhases()
+	set := make(map[string]bool, len(phases))
+	for _, p := range phases {
+		set[p] = true
+	}
+	return set
+}
+
+// isJDAgent reports whether the agent name is a judgment-day workflow agent.
+// JD agents are excluded from root model fallback to preserve independent
+// model configuration for diversity of perspective between judges.
+func isJDAgent(name string) bool {
+	return jdAgentSet[name]
+}
+
 // injectModelAssignments injects "model" fields into sub-agent definitions
 // within the overlay JSON before it is merged into the settings file.
 //
@@ -1819,8 +1847,12 @@ func injectModelAssignments(overlayBytes []byte, assignments map[string]model.Mo
 			// Also clear variant explicitly so the overlay output stays symmetric
 			// with case 1 — this prevents a stale variant from leaking through if
 			// the embedded overlay or upstream pipeline ever carries a variant.
-			agentMap["model"] = rootModelID
-			agentMap["variant"] = ""
+			// Exception: JD agents are excluded from root model propagation to support
+			// independent model configuration and diversity of perspective between judges.
+			if !isJDAgent(phase) {
+				agentMap["model"] = rootModelID
+				agentMap["variant"] = ""
+			}
 		}
 	}
 

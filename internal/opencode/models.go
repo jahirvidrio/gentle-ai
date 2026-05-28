@@ -363,3 +363,26 @@ func SDDPhases() []string {
 		"sdd-archive",
 	}
 }
+
+// JDPhases returns the ordered list of judgment-day sub-agent names.
+// These are workflow-level agents (not SDD phases) used by the
+// judgment-day skill for parallel adversarial review.
+// They support independent model configuration for diversity of perspective.
+func JDPhases() []string {
+	return []string{
+		"jd-judge-a",
+		"jd-judge-b",
+		"jd-fix-agent",
+	}
+}
+
+// ConfigurableAgentPhases returns all agent names that support per-agent
+// model configuration. This includes SDD phases + JD agents.
+// Used by the inject model assignment table builder and the configurable agent set
+// in ReadCurrentModelAssignments. The TUI model picker uses SDDPhases() and
+// JDPhases() separately for row layout control.
+func ConfigurableAgentPhases() []string {
+	phases := SDDPhases()
+	phases = append(phases, JDPhases()...)
+	return phases
+}
