@@ -772,6 +772,37 @@ func TestGentlemanLanguageInstructionsDoNotBiasEnglishSessions(t *testing.T) {
 			}
 		})
 	}
+
+	for _, path := range []string{
+		"claude/engram-protocol.md",
+		"codex/engram-instructions.md",
+		"skills/_shared/engram-convention.md",
+	} {
+		t.Run(path+"/lifecycle", func(t *testing.T) {
+			content := MustRead(path)
+
+			required := []string{
+				"when Engram exposes lifecycle metadata/tooling",
+				"active memories may be used normally",
+				"needs_review",
+				"stale context",
+				"verify it against current evidence before relying on it",
+				"Do NOT mark memories reviewed automatically",
+				"explicit user confirmation or through a dedicated memory maintenance command",
+			}
+			for _, want := range required {
+				if !strings.Contains(content, want) {
+					t.Fatalf("%s missing memory lifecycle rule %q", path, want)
+				}
+			}
+
+			for _, forbidden := range []string{"mem_review", "mark_reviewed"} {
+				if strings.Contains(content, forbidden) {
+					t.Fatalf("%s must not mention blocked runtime lifecycle tooling %q", path, forbidden)
+				}
+			}
+		})
+	}
 }
 
 // TestPersonasContainContextualSkillLoadingDirective verifies that every

@@ -115,6 +115,9 @@ func TestInjectClaudeWritesProtocolSection(t *testing.T) {
 	if !strings.Contains(text, "mem_save") {
 		t.Fatal("CLAUDE.md missing real engram protocol content (expected 'mem_save')")
 	}
+	if !strings.Contains(text, "needs_review") {
+		t.Fatal("CLAUDE.md missing memory lifecycle stale-context rule (expected 'needs_review')")
+	}
 }
 
 func TestInjectClaudeIsIdempotent(t *testing.T) {
@@ -714,6 +717,9 @@ func TestInjectCodexWritesInstructionFiles(t *testing.T) {
 	}
 	if !strings.Contains(string(content), "mem_save") {
 		t.Fatal("engram-instructions.md missing expected content (mem_save)")
+	}
+	if !strings.Contains(string(content), "needs_review") {
+		t.Fatal("engram-instructions.md missing memory lifecycle stale-context rule (needs_review)")
 	}
 
 	compactPath := filepath.Join(home, ".codex", "engram-compact-prompt.md")
