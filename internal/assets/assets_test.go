@@ -556,19 +556,24 @@ func TestOpenCodeSDDOrchestratorRequiresSessionPreflight(t *testing.T) {
 		"Chained PR strategy",
 		"Review budget",
 		"`openspec/config.yaml`, existing SDD artifacts, previous `sdd-init` results, or installed SDD assets do NOT satisfy session preflight",
-		"ask the localized user-facing preflight prompt above and STOP",
-		"Ask the user directly with a compact, numbered preflight prompt",
-		"Match the user's current language",
-		"Do NOT mix languages inside one preflight prompt",
-		"If the current language is Spanish, use the Spanish localized shape below as the neutral fallback",
-		"adapt only user-facing prose to that persona",
-		"translate user-facing prose to the user's current language",
+		"Use the `question` tool for SDD Session Preflight",
+		"Ask all four preflight groups in one single `question` tool call",
+		"OpenCode can render the groups as tabs",
+		"Do NOT run this as a sequential wizard",
+		"Do NOT issue four separate `question` tool calls",
+		"The single `question` tool call must contain these four localized groups in this order",
+		"Match the user's current language and active persona",
+		"Treat the preflight UI as direct orchestrator conversation",
+		"not as a generated technical artifact",
+		"Technical artifacts still default to English",
+		"this UI follows the user's conversation language/persona",
+		"Do NOT mix languages inside one grouped question",
+		"Do NOT show option codes",
+		"Do NOT show canonical values",
+		"map the selected human labels to canonical values internally",
 		"¿Quiere ajustar algo o continuamos?",
-		"B. Artefactos",
-		"D. Revisión",
-		"la estimación supera el presupuesto",
-		"Do NOT mention non-existent tools",
-		"A1, B1, C1, D1",
+		"Artifacts: OpenSpec, Engram, Both",
+		"Review: 400 lines, 800 lines, Other",
 		"### SDD Entry Routing (MANDATORY)",
 		"Never launch `sdd-apply` just because the user asked to implement a feature",
 		"In **Interactive** mode, between phases",
@@ -584,21 +589,21 @@ func TestOpenCodeSDDOrchestratorRequiresSessionPreflight(t *testing.T) {
 	}
 }
 
-func TestOpenCodeSDDOrchestratorSpanishPreflightIsLocalized(t *testing.T) {
+func TestOpenCodeSDDOrchestratorPreflightDoesNotUseVisibleCodesOrCanonicalUIValues(t *testing.T) {
 	content := MustRead("opencode/sdd-orchestrator.md")
-	start := strings.Index(content, "Antes de continuar con SDD")
+	start := strings.Index(content, "User-facing preflight question format:")
 	if start < 0 {
-		t.Fatal("opencode/sdd-orchestrator.md missing Spanish preflight block")
+		t.Fatal("opencode/sdd-orchestrator.md missing preflight question format block")
 	}
 	end := strings.Index(content[start:], "Map answers to canonical values")
 	if end < 0 {
-		t.Fatal("opencode/sdd-orchestrator.md missing end of Spanish preflight block")
+		t.Fatal("opencode/sdd-orchestrator.md missing end of preflight question format block")
 	}
-	spanishBlock := content[start : start+end]
+	uiBlock := content[start : start+end]
 
-	for _, forbidden := range []string{"B. Artifacts", "D. Review", "forecast", "budget"} {
-		if strings.Contains(spanishBlock, forbidden) {
-			t.Fatalf("Spanish preflight block should localize user-facing prose; found %q", forbidden)
+	for _, forbidden := range []string{"A1", "A2", "B1", "C1", "D1", "`interactive`", "`openspec`", "`ask-always`"} {
+		if strings.Contains(uiBlock, forbidden) {
+			t.Fatalf("preflight UI instructions should not expose option codes or canonical values; found %q", forbidden)
 		}
 	}
 }
@@ -1119,6 +1124,23 @@ func TestOpenCodeSDDOverlaySubagentsAreExplicitExecutors(t *testing.T) {
 			// inlineOpenCodeSDDPrompts. Verify the placeholder format.
 			// single overlay still uses inline prompt strings.
 			isMulti := assetPath == "opencode/sdd-overlay-multi.json"
+
+			orchestrator, ok := agents["gentle-orchestrator"].(map[string]any)
+			if !ok {
+				t.Fatalf("%q missing gentle-orchestrator agent", assetPath)
+			}
+			permissions, ok := orchestrator["permission"].(map[string]any)
+			if !ok || permissions["question"] != "allow" {
+				t.Fatalf("%q gentle-orchestrator must allow question permission", assetPath)
+			}
+			tools, ok := orchestrator["tools"].(map[string]any)
+			if !ok {
+				t.Fatalf("%q gentle-orchestrator missing tools", assetPath)
+			}
+			replacedTools, ok := tools["__replace__"].(map[string]any)
+			if !ok || replacedTools["question"] != true {
+				t.Fatalf("%q gentle-orchestrator must enable question tool", assetPath)
+			}
 
 			for _, phase := range []string{"sdd-init", "sdd-explore", "sdd-propose", "sdd-spec", "sdd-design", "sdd-tasks", "sdd-apply", "sdd-verify", "sdd-archive"} {
 				agentDef, ok := agents[phase].(map[string]any)

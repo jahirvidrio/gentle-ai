@@ -904,8 +904,82 @@ func migratePreservedOpenCodeOrchestratorPrompt(prompt string) string {
 		"Bind this to the dedicated `gentle-orchestrator` agent only.",
 		"agent.sdd-orchestrator.model",
 		"agent.gentle-orchestrator.model",
+		"Before continuing with SDD, choose one option per group.\n",
+		"",
+		"Before continuing with SDD, choose one option per group.\r\n",
+		"",
+		"Antes de continuar con SDD, elija una opción por grupo.\n",
+		"",
+		"Antes de continuar con SDD, elija una opción por grupo.\r\n",
+		"",
 	)
-	return ensurePreservedOpenCodeDelegationHardGates(ensurePreservedOpenCodeOrchestratorPreflight(replacer.Replace(prompt)))
+	migrated := removeLegacyOpenCodePlainChatPreflightLines(replacer.Replace(prompt))
+	return ensurePreservedOpenCodeDelegationHardGates(ensurePreservedOpenCodeOrchestratorPreflight(migrated))
+}
+
+func removeLegacyOpenCodePlainChatPreflightLines(prompt string) string {
+	legacyFragments := []string{
+		"Ask the user directly with a compact, numbered preflight prompt.",
+		"Keep option codes",
+		"Do NOT ask the user to type raw keys",
+		"Use this shape for English users",
+		"If the user's current language is Spanish, use this localized shape:",
+		"Do NOT mix languages inside one preflight prompt",
+		"Spanish localized shape below as the neutral fallback",
+		"translate user-facing prose to the user's current language while preserving option codes",
+		"Before continuing with SDD, choose one option per group.",
+		"Reply with \"use recommended\" or with codes like:",
+		"A. Pace",
+		"A1 Interactive",
+		"A2 Automatic",
+		"B. Artifacts",
+		"B1 OpenSpec",
+		"B2 Engram",
+		"B3 Both",
+		"C. PRs",
+		"C1 Ask me",
+		"C2 Single PR",
+		"C3 Chained",
+		"C4 Auto",
+		"D. Review",
+		"D1 400 lines",
+		"D2 800 lines",
+		"D3 Other",
+		"After asking this, STOP and wait for the user's answer.",
+		"Antes de continuar con SDD, elija una opción por grupo.",
+		"Responda con \"usar recomendado\" o con códigos como:",
+		"A. Ritmo",
+		"A1 Interactivo",
+		"A2 Automático",
+		"B. Artefactos",
+		"B1 OpenSpec",
+		"B2 Engram",
+		"B3 Ambos",
+		"C1 Preguntarme",
+		"C2 Un solo PR",
+		"C3 Encadenados",
+		"D. Revisión",
+		"D1 400 líneas",
+		"D2 800 líneas",
+		"D3 Otro",
+		"Map answers to canonical values: A1/Interactive",
+	}
+
+	lines := strings.Split(prompt, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
+		stale := false
+		for _, fragment := range legacyFragments {
+			if strings.Contains(line, fragment) {
+				stale = true
+				break
+			}
+		}
+		if !stale {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "\n")
 }
 
 func ensurePreservedOpenCodeDelegationHardGates(prompt string) string {
@@ -966,72 +1040,33 @@ Before executing ANY SDD command or natural-language SDD request, ensure this se
 
 Required preflight choices: execution mode, artifact store, chained PR strategy, and review budget.
 
-Ask the user directly with a compact, numbered preflight prompt. Match the user's current language for all user-facing prose. If the user writes Spanish, ask the preflight in Spanish. Keep option codes (` + "`A1`" + `, ` + "`B1`" + `, ` + "`C1`" + `, ` + "`D1`" + `) and canonical values unchanged. Do NOT ask the user to type raw keys like ` + "`execution mode`" + `, ` + "`artifact store`" + `, ` + "`chained PR strategy`" + `, or ` + "`review budget`" + `. Do NOT mention non-existent tools. Do NOT invent informal values; use only the canonical values after the user chooses.
+Use the ` + "`question`" + ` tool for SDD Session Preflight. Do NOT render the full preflight menu as plain chat text.
 
-Do NOT mix languages inside one preflight prompt: headings, option titles, descriptions, and follow-up text must all be in the user's current language. If the current language is Spanish, use the Spanish localized shape below as the neutral fallback; if an active persona defines a direct-conversation Spanish style, adapt only user-facing prose to that persona while preserving option codes and canonical values. Do not translate only the intro while keeping English labels like ` + "`Pace`" + `, ` + "`Artifacts`" + `, ` + "`Review`" + `, ` + "`recommended`" + `, ` + "`forecast`" + `, or ` + "`budget`" + `.
+Ask all four preflight groups in one single ` + "`question`" + ` tool call so OpenCode can render the groups as tabs. Do NOT run this as a sequential wizard. Do NOT issue four separate ` + "`question`" + ` tool calls.
 
-Use this shape for English users, or translate user-facing prose to the user's current language while preserving option codes. Translation means the whole shape: headings, option titles, and descriptions together.
+The single ` + "`question`" + ` tool call must contain these four localized groups in this order:
 
-` + "```text" + `
-Before continuing with SDD, choose one option per group.
-Reply with "use recommended" or with codes like: A1, B1, C1, D1.
+1. Pace: Interactive, Automatic.
+2. Artifacts: OpenSpec, Engram, Both.
+3. PRs: Ask me, Single PR, Chained, Auto.
+4. Review: 400 lines, 800 lines, Other.
 
-A. Pace
-   A1 Interactive (recommended): show each phase and wait for confirmation before continuing.
-   A2 Automatic: run phases back-to-back and stop only on high risk.
+Match the user's current language and active persona for question labels and descriptions. Treat the preflight UI as direct orchestrator conversation, not as a generated technical artifact. Technical artifacts still default to English, but this UI follows the user's conversation language/persona. Do NOT mix languages inside one grouped question.
 
-B. Artifacts
-   B1 OpenSpec (recommended): repo files, traceable in review.
-   B2 Engram: faster, no spec files in the repo.
-   B3 Both: OpenSpec files plus Engram copy.
+Do NOT show option codes in the interactive UI. Do NOT show canonical values or other internal values in the interactive UI labels or descriptions.
 
-C. PRs
-   C1 Ask me (recommended): stop and ask if the forecast exceeds the budget.
-   C2 Single PR: try to keep the change in one PR.
-   C3 Chained: split into chained PRs from the start.
-   C4 Auto: decide from the size forecast.
+After the single grouped ` + "`question`" + ` tool call returns, map the selected human labels to canonical values internally. Do not reveal the canonical values in the UI.
 
-D. Review
-   D1 400 lines (recommended): stop if forecast exceeds 400 changed lines.
-   D2 800 lines: more permissive; useful for medium changes.
-   D3 Other: ask for the number afterwards.
-` + "```" + `
+If Other is selected for review budget, ask one follow-up question for the numeric budget.
 
-After asking this, STOP and wait for the user's answer.
+Only after all four preflight choices are collected, summarize them as the ` + "`SDD Session Preflight`" + ` decision block and continue with the SDD init guard/requested phase.
 
-If the user's current language is Spanish, use this localized shape:
-
-` + "```text" + `
-Antes de continuar con SDD, elija una opción por grupo.
-Responda con "usar recomendado" o con códigos como: A1, B1, C1, D1.
-
-A. Ritmo
-   A1 Interactivo (recomendado): mostrar cada fase y esperar confirmación antes de continuar.
-   A2 Automático: ejecutar las fases seguidas y frenar solo ante riesgo alto.
-
-B. Artefactos
-   B1 OpenSpec (recomendado): archivos en el repo, trazables en revisión.
-   B2 Engram: más rápido, sin archivos de especificación en el repo.
-   B3 Ambos: archivos OpenSpec más copia en Engram.
-
-C. PRs
-   C1 Preguntarme (recomendado): frenar y preguntar si la estimación supera el presupuesto.
-   C2 Un solo PR: intentar mantener el cambio en un PR.
-   C3 Encadenados: separar en PRs encadenados desde el inicio.
-   C4 Auto: decidir según la estimación de tamaño.
-
-D. Revisión
-   D1 400 líneas (recomendado): frenar si la estimación supera 400 líneas cambiadas.
-   D2 800 líneas: más permisivo; útil para cambios medianos.
-   D3 Otro: preguntar el número después.
-` + "```" + `
-
-Map answers to canonical values: A1/Interactive -> ` + "`interactive`" + `; A2/Automatic -> ` + "`auto`" + `; B1/OpenSpec -> ` + "`openspec`" + `; B2/Engram -> ` + "`engram`" + `; B3/Both -> ` + "`both`" + `; C1/Ask me -> ` + "`ask-always`" + `; C2/Single PR -> ` + "`single-pr-default`" + `; C3/Chained -> ` + "`force-chained`" + `; C4/Auto -> ` + "`auto-forecast`" + `; D1/400 lines -> ` + "`review_budget_lines: 400`" + `; D2/800 lines -> ` + "`review_budget_lines: 800`" + `; D3/Other -> ask one follow-up for the number.
+Map answers to canonical values: Interactive -> ` + "`interactive`" + `; Automatic -> ` + "`auto`" + `; OpenSpec -> ` + "`openspec`" + `; Engram -> ` + "`engram`" + `; Both -> ` + "`both`" + `; Ask me -> ` + "`ask-always`" + `; Single PR -> ` + "`single-pr-default`" + `; Chained -> ` + "`force-chained`" + `; Auto -> ` + "`auto-forecast`" + `; 400 lines -> ` + "`review_budget_lines: 400`" + `; 800 lines -> ` + "`review_budget_lines: 800`" + `; Other -> ask one follow-up for the number.
 
 Hard gate rules:
 
 - ` + "`openspec/config.yaml`" + `, existing SDD artifacts, previous ` + "`sdd-init`" + ` results, or installed SDD assets do NOT satisfy session preflight.
-- If the session has no preflight block, ask the localized user-facing preflight prompt above and STOP. Do not run init, delegate phases, edit files, or apply tasks in the same turn.
+- If the session has no preflight block, ask the single grouped ` + "`question`" + ` tool preflight above. Do not run init, delegate phases, edit files, or apply tasks until all four choices are collected.
 - For a new feature request that says to use SDD, start at preflight -> init guard -> explore/proposal. Never launch ` + "`sdd-apply`" + ` just because the user asked to implement a feature.
 - In ` + "`interactive`" + ` mode, pause after each delegated phase returns, summarize the phase, ask before launching the next phase, and STOP. Match the user's language and active persona for direct conversation only; for Spanish neutral fallback ask: "¿Quiere ajustar algo o continuamos?". Do not run /sdd-ff phases back-to-back unless execution mode is ` + "`auto`" + `.
 - Interactive approval is phase-scoped. Words like "continue", "dale", or "go on" approve only the immediate next phase, not the rest of the SDD pipeline. Do not treat a generated artifact as approved until the user has had a chance to review or explicitly delegate that review.
@@ -1043,14 +1078,15 @@ Hard gate rules:
 		strings.Contains(prompt, "openspec/config.yaml") &&
 		strings.Contains(prompt, "Never launch `sdd-apply`") &&
 		strings.Contains(prompt, "Match the user's current language") &&
-		strings.Contains(prompt, "Do NOT mix languages inside one preflight prompt") &&
-		strings.Contains(prompt, "Spanish localized shape below as the neutral fallback") &&
+		strings.Contains(prompt, "Ask all four preflight groups in one single `question` tool call") &&
+		strings.Contains(prompt, "groups as tabs") &&
+		strings.Contains(prompt, "Do NOT run this as a sequential wizard") &&
+		strings.Contains(prompt, "Do NOT mix languages inside one grouped question") &&
+		strings.Contains(prompt, "map the selected human labels to canonical values internally") &&
 		strings.Contains(prompt, "pause after each delegated phase returns") &&
 		strings.Contains(prompt, "approve only the immediate next phase") &&
 		strings.Contains(prompt, "proposal question round") &&
 		strings.Contains(prompt, "business rules, implications, impact, edge cases") &&
-		strings.Contains(prompt, "Before continuing with SDD") &&
-		!strings.Contains(prompt, "question` tool") &&
 		!containsOpenCodeOrchestratorLanguageLeak(prompt) {
 		return prompt
 	}

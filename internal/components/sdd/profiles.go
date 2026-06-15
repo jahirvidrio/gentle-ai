@@ -288,6 +288,7 @@ func GenerateProfileOverlay(profile model.Profile, homeDir string) ([]byte, erro
 		"description": "SDD Orchestrator (" + profile.Name + " profile) - coordinates sub-agents, never does work inline",
 		"prompt":      orchestratorPrompt,
 		"permission": map[string]any{
+			"question": "allow",
 			"task": map[string]any{
 				"__replace__": taskPerms,
 			},
@@ -298,6 +299,7 @@ func GenerateProfileOverlay(profile model.Profile, homeDir string) ([]byte, erro
 				"write": true,
 				"edit":  true,
 				"bash":  true,
+				"question": true,
 				"task":  true,
 			},
 		},

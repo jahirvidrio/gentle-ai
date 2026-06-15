@@ -612,11 +612,20 @@ func TestInjectOpenCodeMigratesPreservedLegacyOrchestratorPromptReferences(t *te
 		"Bind this to the dedicated `gentle-orchestrator` agent only.",
 		"agent.gentle-orchestrator.model",
 		"### SDD Session Preflight (HARD GATE)",
-		"ask the localized user-facing preflight prompt above and STOP",
-		"Match the user's current language",
-		"Do NOT mix languages inside one preflight prompt",
-		"If the current language is Spanish, use the Spanish localized shape below as the neutral fallback",
-		"adapt only user-facing prose to that persona",
+		"Use the `question` tool for SDD Session Preflight",
+		"Ask all four preflight groups in one single `question` tool call",
+		"OpenCode can render the groups as tabs",
+		"Do NOT run this as a sequential wizard",
+		"Do NOT issue four separate `question` tool calls",
+		"Match the user's current language and active persona",
+		"Treat the preflight UI as direct orchestrator conversation",
+		"not as a generated technical artifact",
+		"Technical artifacts still default to English",
+		"this UI follows the user's conversation language/persona",
+		"Do NOT mix languages inside one grouped question",
+		"Do NOT show option codes",
+		"Do NOT show canonical values or other internal values",
+		"map the selected human labels to canonical values internally",
 		"pause after each delegated phase returns",
 		"approve only the immediate next phase",
 		"proposal question round",
@@ -649,7 +658,36 @@ func TestInjectOpenCodeMigratesPartialPreflightPrompt(t *testing.T) {
 		t.Fatalf("MkdirAll(settings dir) error = %v", err)
 	}
 
-	const partialPrompt = "# Custom prompt\n\nBefore continuing with SDD, choose one option per group.\n"
+	const partialPrompt = `# Custom prompt
+
+Ask the user directly with a compact, numbered preflight prompt. Match the user's current language for all user-facing prose. Keep option codes (A1, B1, C1, D1) and canonical values unchanged.
+Do NOT ask the user to type raw keys like execution mode, artifact store, chained PR strategy, or review budget.
+Use this shape for English users, or translate user-facing prose to the user's current language while preserving option codes.
+Before continuing with SDD, choose one option per group.
+Reply with "use recommended" or with codes like: A1, B1, C1, D1.
+
+A. Pace
+   A1 Interactive (recommended): show each phase and wait for confirmation before continuing.
+   A2 Automatic: run phases back-to-back and stop only on high risk.
+
+B. Artifacts
+   B1 OpenSpec (recommended): repo files, traceable in review.
+   B2 Engram: faster, no spec files in the repo.
+   B3 Both: OpenSpec files plus Engram copy.
+
+C. PRs
+   C1 Ask me (recommended): stop and ask if the forecast exceeds the budget.
+   C2 Single PR: try to keep the change in one PR.
+   C3 Chained: split into chained PRs from the start.
+   C4 Auto: decide from the size forecast.
+
+D. Review
+   D1 400 lines (recommended): stop if forecast exceeds 400 changed lines.
+   D2 800 lines: more permissive; useful for medium changes.
+   D3 Other: ask for the number afterwards.
+
+Map answers to canonical values: A1/Interactive -> interactive.
+`
 	seed := `{
   "agent": {
     "gentle-orchestrator": {
@@ -676,14 +714,21 @@ func TestInjectOpenCodeMigratesPartialPreflightPrompt(t *testing.T) {
 	text := string(settingsBytes)
 	for _, wanted := range []string{
 		"# Custom prompt",
-		"Before continuing with SDD, choose one option per group.",
-		"Antes de continuar con SDD, elija una opción por grupo.",
 		"### SDD Session Preflight (HARD GATE)",
 		"openspec/config.yaml",
-		"Match the user's current language",
-		"Do NOT mix languages inside one preflight prompt",
-		"If the current language is Spanish, use the Spanish localized shape below as the neutral fallback",
-		"adapt only user-facing prose to that persona",
+		"Use the `question` tool for SDD Session Preflight",
+		"Ask all four preflight groups in one single `question` tool call",
+		"OpenCode can render the groups as tabs",
+		"Do NOT run this as a sequential wizard",
+		"Match the user's current language and active persona",
+		"Treat the preflight UI as direct orchestrator conversation",
+		"not as a generated technical artifact",
+		"Technical artifacts still default to English",
+		"this UI follows the user's conversation language/persona",
+		"Do NOT mix languages inside one grouped question",
+		"Do NOT show option codes",
+		"Do NOT show canonical values or other internal values",
+		"map the selected human labels to canonical values internally",
 		"pause after each delegated phase returns",
 		"approve only the immediate next phase",
 		"proposal question round",
@@ -692,6 +737,24 @@ func TestInjectOpenCodeMigratesPartialPreflightPrompt(t *testing.T) {
 	} {
 		if !strings.Contains(text, wanted) {
 			t.Fatalf("opencode.json missing migrated partial prompt content %q", wanted)
+		}
+	}
+	for _, stale := range []string{
+		"Ask the user directly with a compact, numbered preflight prompt.",
+		"Keep option codes",
+		"Do NOT ask the user to type raw keys",
+		"Use this shape for English users",
+		"preserving option codes",
+		"Before continuing with SDD, choose one option per group.",
+		"Reply with \\\"use recommended\\\" or with codes like:",
+		"A1 Interactive",
+		"B1 OpenSpec",
+		"C1 Ask me",
+		"D1 400 lines",
+		"Map answers to canonical values: A1/Interactive",
+	} {
+		if strings.Contains(text, stale) {
+			t.Fatalf("opencode.json should remove stale plain-chat preflight fragment %q", stale)
 		}
 	}
 }
@@ -760,10 +823,19 @@ Hard gate rules:
 	}
 	for _, wanted := range []string{
 		"# Custom prompt",
-		"If the current language is Spanish, use the Spanish localized shape below as the neutral fallback",
-		"adapt only user-facing prose to that persona",
-		"Antes de continuar con SDD, elija una opción por grupo.",
-		"Responda con",
+		"Use the `question` tool for SDD Session Preflight",
+		"Ask all four preflight groups in one single `question` tool call",
+		"OpenCode can render the groups as tabs",
+		"Do NOT run this as a sequential wizard",
+		"Do NOT issue four separate `question` tool calls",
+		"Do NOT mix languages inside one grouped question",
+		"Do NOT show option codes",
+		"Do NOT show canonical values or other internal values",
+		"map the selected human labels to canonical values internally",
+		"Treat the preflight UI as direct orchestrator conversation",
+		"not as a generated technical artifact",
+		"Technical artifacts still default to English",
+		"this UI follows the user's conversation language/persona",
 		"for Spanish neutral fallback ask",
 		"approve only the immediate next phase",
 		"proposal question round",
