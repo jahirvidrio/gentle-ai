@@ -3148,6 +3148,7 @@ func TestDependencyTreeEnterBackNavigatesToOpenCodePlugins(t *testing.T) {
 // a loop between ModelPicker ↔ StrictTDD.
 func TestModelPickerEnterBackNavigatesToSDDMode(t *testing.T) {
 	m := NewModel(system.DetectionResult{}, "dev")
+	withModelCacheOverride(t)
 	m.Screen = ScreenModelPicker
 	m.Selection.Preset = model.PresetFullGentleman // non-custom
 	m.Selection.Agents = []model.AgentID{model.AgentOpenCode}
@@ -3172,6 +3173,7 @@ func TestModelPickerEnterBackNavigatesToSDDMode(t *testing.T) {
 // before going to DependencyTree. Previously it went directly to DependencyTree.
 func TestModelPickerContinueMultiGoesToStrictTDD(t *testing.T) {
 	m := NewModel(system.DetectionResult{}, "dev")
+	withModelCacheOverride(t)
 	m.Screen = ScreenModelPicker
 	m.Selection.Preset = model.PresetFullGentleman // non-custom
 	m.Selection.Agents = []model.AgentID{model.AgentOpenCode}
