@@ -11,7 +11,8 @@ import (
 // RenderProfileCreate renders the multi-step profile create/edit screen.
 //
 // step 0: name input (text field with validation feedback)
-// step 1: assign models — orchestrator + sub-agents in one ModelPicker screen
+// step 1: assign models — orchestrator, SDD sub-agents, and optional JD agents
+// in one ModelPicker screen
 // step 2: confirm screen with summary + Create/Save & Sync button
 //
 // editMode=true shows "Edit Profile" header and "Save & Sync" instead of "Create & Sync".
@@ -88,8 +89,8 @@ func renderProfileNameStep(draft model.Profile, nameInput string, namePos int, n
 	return styles.FrameStyle.Render(b.String())
 }
 
-// renderProfileModelStep renders step 1: assign models for orchestrator + sub-agents.
-// Uses the existing ModelPicker with all rows (orchestrator, Set all, 9 phases).
+// renderProfileModelStep renders step 1: assign models for orchestrator,
+// SDD sub-agents, and optional Judgment Day agents.
 func renderProfileModelStep(
 	assignments map[string]model.ModelAssignment,
 	picker ModelPickerState,
@@ -110,7 +111,7 @@ func renderProfileModelStep(
 	b.WriteString(styles.SubtextStyle.Render("Assign models for profile: " + profileName))
 	b.WriteString("\n\n")
 
-	// Reuse the full ModelPicker (orchestrator + Set all + 9 phases).
+	// Reuse the full ModelPicker row contract for profile-scoped assignments.
 	b.WriteString(RenderModelPicker(assignments, picker, cursor))
 
 	return styles.FrameStyle.Render(b.String())
@@ -143,7 +144,7 @@ func renderProfileConfirmStep(draft model.Profile, cursor int, editMode bool) st
 
 	phaseCount := len(draft.PhaseAssignments)
 	if phaseCount > 0 {
-		b.WriteString(styles.SubtextStyle.Render("Phase assignments: "))
+		b.WriteString(styles.SubtextStyle.Render("Model assignments: "))
 		b.WriteString(styles.UnselectedStyle.Render(fmt.Sprintf("%d assigned", phaseCount)))
 		b.WriteString("\n")
 	}
@@ -165,7 +166,7 @@ func renderProfileConfirmStep(draft model.Profile, cursor int, editMode bool) st
 // given step in the profile create/edit flow.
 //
 // step 0: 0 (text input — no cursor navigation)
-// step 1: ModelPicker option count (rows + Continue + Back)
+// step 1: ModelPicker option count (SDD/JD rows + Continue + Back)
 // step 2: 2 ("Create & Sync" / "Save & Sync" + "Cancel")
 func ProfileCreateOptionCount(step int, picker ModelPickerState) int {
 	switch step {
@@ -173,9 +174,9 @@ func ProfileCreateOptionCount(step int, picker ModelPickerState) int {
 		return 0 // text input mode
 	case 1:
 		if len(picker.AvailableIDs) == 0 {
-			return 1 // only "Back"
+			return 2 // "Continue with defaults" + "Back"
 		}
-		return len(ModelPickerRowsForProfile()) + 2 // rows + Continue + Back (JD excluded for profiles)
+		return len(ModelPickerRowsForProfile()) + 2 // rows + Continue + Back
 	default:
 		return 2 // "Create & Sync" / "Save & Sync" + "Cancel"
 	}

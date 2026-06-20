@@ -72,8 +72,8 @@ type ModelPickerState struct {
 	SelectedModelEffortLevels []string
 
 	// ForProfile is true when the picker is used for profile creation/editing.
-	// When true, JD agents and the separator are excluded from the row list
-	// because JD agents are global (not profile-scoped).
+	// When true, the row list still includes optional profile-scoped Judgment Day
+	// agents alongside SDD rows.
 	ForProfile bool
 }
 
@@ -137,13 +137,10 @@ func ModelPickerRows() []string {
 }
 
 // ModelPickerRowsForProfile returns model picker rows for profile creation.
-// JD agents are excluded because they are global (not profile-scoped).
+// Profiles support both SDD phase assignments and optional Judgment Day agent
+// assignments, so this mirrors the main OpenCode row list.
 func ModelPickerRowsForProfile() []string {
-	rows := make([]string, 0, 2+len(opencode.SDDPhases()))
-	rows = append(rows, SDDOrchestratorPhase)
-	rows = append(rows, "Set all SDD phases")
-	rows = append(rows, opencode.SDDPhases()...)
-	return rows
+	return ModelPickerRows()
 }
 
 // SeparatorRowIdx returns the index of the "--- Judgment Day ---" separator
@@ -450,6 +447,42 @@ func applyAssignmentPreservingMatchingEffort(state ModelPickerState, assignments
 	return assignments
 }
 
+// ClearModelPickerAssignment removes the assignment represented by the selected
+// row. Row 1 clears only SDD sub-agent assignments; Judgment Day assignments are
+// independent profile slots and must be cleared explicitly from their own rows.
+func ClearModelPickerAssignment(state *ModelPickerState, assignments map[string]model.ModelAssignment) map[string]model.ModelAssignment {
+	if state == nil || assignments == nil {
+		return assignments
+	}
+
+	phases := opencode.SDDPhases()
+	jdPhases := opencode.JDPhases()
+	separatorIdx := SeparatorRowIdx()
+
+	switch {
+	case state.SelectedPhaseIdx == 0:
+		delete(assignments, SDDOrchestratorPhase)
+	case state.SelectedPhaseIdx == 1:
+		for _, phase := range phases {
+			delete(assignments, phase)
+		}
+		state.AllPhasesModel = model.ModelAssignment{}
+	case state.SelectedPhaseIdx == separatorIdx:
+		// Separator row — no assignment to clear.
+	case state.SelectedPhaseIdx > separatorIdx:
+		jdIdx := state.SelectedPhaseIdx - separatorIdx - 1
+		if jdIdx < len(jdPhases) {
+			delete(assignments, jdPhases[jdIdx])
+		}
+	default:
+		phaseIdx := state.SelectedPhaseIdx - 2
+		if phaseIdx < len(phases) {
+			delete(assignments, phases[phaseIdx])
+		}
+	}
+	return assignments
+}
+
 func preserveMatchingEffort(existing, assignment model.ModelAssignment, preserveEffort bool) model.ModelAssignment {
 	if preserveEffort && existing.ProviderID == assignment.ProviderID && existing.ModelID == assignment.ModelID {
 		assignment.Effort = existing.Effort
@@ -635,7 +668,7 @@ func renderPhaseList(
 
 	title := "Assign Models to SDD Phases & JD Agents"
 	if state.ForProfile {
-		title = "Assign Models to SDD Phases"
+		title = "Assign Models to SDD Phases & JD Agents"
 	}
 	b.WriteString(styles.TitleStyle.Render(title))
 	b.WriteString("\n\n")
@@ -651,7 +684,11 @@ func renderPhaseList(
 		b.WriteString("\n")
 		b.WriteString(styles.SubtextStyle.Render("Using default model assignments for now."))
 		b.WriteString("\n\n")
-		b.WriteString(renderOptions([]string{"Continue with defaults", "← Back to SDD mode"}, cursor))
+		backLabel := "← Back to SDD mode"
+		if state.ForProfile {
+			backLabel = "← Back"
+		}
+		b.WriteString(renderOptions([]string{"Continue with defaults", backLabel}, cursor))
 		b.WriteString("\n")
 		b.WriteString(styles.HelpStyle.Render("enter: confirm • esc: back"))
 		return b.String()
@@ -697,9 +734,9 @@ func renderPhaseList(
 		case idx == separatorIdx:
 			// Separator row — render as a visual divider with subtle indicator when focused.
 			if focused {
-				b.WriteString(styles.SubtextStyle.Render("▸ " + row) + "\n")
+				b.WriteString(styles.SubtextStyle.Render("▸ "+row) + "\n")
 			} else {
-				b.WriteString(styles.SubtextStyle.Render("  " + row) + "\n")
+				b.WriteString(styles.SubtextStyle.Render("  "+row) + "\n")
 			}
 			continue
 		case idx > separatorIdx:
@@ -710,7 +747,7 @@ func renderPhaseList(
 				assignment, ok := assignments[phase]
 				if ok && assignment.ProviderID != "" {
 					provName, modelName := resolveNames(assignment, state)
-					label = fmt.Sprintf("%-20s %s / %s", row, provName, modelName)
+					label = formatAssignmentLabel(row, provName, modelName, assignment.Effort)
 				} else {
 					label = fmt.Sprintf("%-20s (default)", row)
 				}
@@ -738,7 +775,11 @@ func renderPhaseList(
 	actionIdx := cursor - len(rows)
 	b.WriteString(renderOptions([]string{"Continue", "← Back"}, actionIdx))
 	b.WriteString("\n")
-	b.WriteString(styles.HelpStyle.Render("j/k: navigate • enter: change model / confirm • esc: back"))
+	help := "j/k: navigate • enter: change model / confirm • esc: back"
+	if state.ForProfile {
+		help = "j/k: navigate • enter: change model / confirm • backspace: clear • esc: back"
+	}
+	b.WriteString(styles.HelpStyle.Render(help))
 
 	return b.String()
 }

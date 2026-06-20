@@ -1245,32 +1245,31 @@ func TestHandleModelNav_JDLastRow(t *testing.T) {
 
 // ─── ModelPickerRowsForProfile ──────────────────────────────────────────
 
-func TestModelPickerRowsForProfile_Count(t *testing.T) {
+func TestModelPickerRowsForProfile(t *testing.T) {
 	rows := ModelPickerRowsForProfile()
-	// 1 orchestrator + 1 "Set all SDD phases" + 10 sub-agents = 12
-	want := 2 + len(opencode.SDDPhases())
+	want := 2 + len(opencode.SDDPhases()) + 1 + len(opencode.JDPhases())
 	if len(rows) != want {
 		t.Fatalf("ModelPickerRowsForProfile() len = %d, want %d; rows = %v", len(rows), want, rows)
 	}
-}
 
-func TestModelPickerRowsForProfile_NoSeparator(t *testing.T) {
-	rows := ModelPickerRowsForProfile()
-	for _, row := range rows {
-		if strings.Contains(row, "---") {
-			t.Fatalf("ModelPickerRowsForProfile() should not contain separator; got: %v", rows)
-		}
+	sepIdx := SeparatorRowIdx()
+	if sepIdx < 0 || sepIdx >= len(rows) {
+		t.Fatalf("SeparatorRowIdx() = %d out of profile rows range %d", sepIdx, len(rows))
 	}
-}
+	if rows[sepIdx] != "--- Judgment Day ---" {
+		t.Fatalf("ModelPickerRowsForProfile()[%d] = %q, want Judgment Day separator; rows = %v", sepIdx, rows[sepIdx], rows)
+	}
 
-func TestModelPickerRowsForProfile_NoJDAgents(t *testing.T) {
-	rows := ModelPickerRowsForProfile()
-	jdPhases := opencode.JDPhases()
-	for _, jd := range jdPhases {
+	for _, jd := range opencode.JDPhases() {
+		found := false
 		for _, row := range rows {
 			if row == jd {
-				t.Fatalf("ModelPickerRowsForProfile() should not contain JD agent %q; got: %v", jd, rows)
+				found = true
+				break
 			}
+		}
+		if !found {
+			t.Fatalf("ModelPickerRowsForProfile() missing JD agent %q; got: %v", jd, rows)
 		}
 	}
 }

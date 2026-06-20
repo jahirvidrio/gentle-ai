@@ -1103,6 +1103,17 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if m.Screen == ScreenProfileCreate && m.ProfileCreateStep == 1 &&
+		m.ModelPicker.Mode == screens.ModePhaseList && keyStr == "backspace" &&
+		len(m.ModelPicker.AvailableIDs) > 0 {
+		rows := screens.ModelPickerRowsForProfile()
+		if m.Cursor < len(rows) && m.Cursor != screens.SeparatorRowIdx() {
+			m.ModelPicker.SelectedPhaseIdx = m.Cursor
+			m.Selection.ModelAssignments = screens.ClearModelPickerAssignment(&m.ModelPicker, m.Selection.ModelAssignments)
+			return m, nil
+		}
+	}
+
 	if m.Screen == ScreenClaudeModelPicker {
 		wasInCustomMode := m.ClaudeModelPicker.InCustomMode
 		previousMode := m.ClaudeModelPicker.Mode
@@ -1259,7 +1270,7 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Skip separator row in model picker — it is not selectable.
-		if m.Screen == ScreenModelPicker && !m.ModelPicker.ForProfile && m.Cursor == screens.SeparatorRowIdx() && m.Cursor > 0 {
+		if m.shouldSkipModelPickerSeparator() && m.Cursor == screens.SeparatorRowIdx() && m.Cursor > 0 {
 			m.Cursor--
 		}
 		return m, nil
@@ -1283,7 +1294,7 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Skip separator row in model picker — it is not selectable.
-		if m.Screen == ScreenModelPicker && !m.ModelPicker.ForProfile && m.Cursor == screens.SeparatorRowIdx() {
+		if m.shouldSkipModelPickerSeparator() && m.Cursor == screens.SeparatorRowIdx() {
 			if m.Cursor+1 < count {
 				m.Cursor++
 			}
@@ -1306,7 +1317,7 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Skip separator row in model picker — it is not selectable.
-		if m.Screen == ScreenModelPicker && !m.ModelPicker.ForProfile && m.Cursor == screens.SeparatorRowIdx() && m.Cursor > 0 {
+		if m.shouldSkipModelPickerSeparator() && m.Cursor == screens.SeparatorRowIdx() && m.Cursor > 0 {
 			m.Cursor--
 		}
 		return m, nil
@@ -1325,7 +1336,7 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		// Skip separator row in model picker — it is not selectable.
-		if m.Screen == ScreenModelPicker && !m.ModelPicker.ForProfile && m.Cursor == screens.SeparatorRowIdx() {
+		if m.shouldSkipModelPickerSeparator() && m.Cursor == screens.SeparatorRowIdx() {
 			if m.Cursor+1 < count {
 				m.Cursor++
 			}
@@ -1421,6 +1432,14 @@ func (m Model) handleKeyPress(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 
 	return m, nil
+}
+
+func (m Model) shouldSkipModelPickerSeparator() bool {
+	if len(m.ModelPicker.AvailableIDs) == 0 {
+		return false
+	}
+	return (m.Screen == ScreenModelPicker && !m.ModelPicker.ForProfile) ||
+		(m.Screen == ScreenProfileCreate && m.ProfileCreateStep == 1 && m.ModelPicker.Mode == screens.ModePhaseList)
 }
 
 func (m Model) confirmSelection() (tea.Model, tea.Cmd) {
@@ -3094,7 +3113,7 @@ func (m Model) optionCount() int {
 		return 1
 	case ScreenModelPicker:
 		if len(m.ModelPicker.AvailableIDs) == 0 {
-			return 2 // Continue with defaults + Back to SDD mode
+			return 2 // Continue with defaults + Back
 		}
 		return len(screens.ModelPickerRows()) + 2 // rows + Continue + Back
 	case ScreenDependencyTree:
@@ -3912,9 +3931,27 @@ func (m Model) confirmProfileCreate() (tea.Model, tea.Cmd) {
 	case 1:
 		// Model assignment picker: orchestrator + all sub-agent phases in one screen.
 		// Reuse the same enter-on-row logic as ScreenModelPicker.
-		// Profile creation uses filtered rows (no JD agents).
+		// Profile creation uses the profile-specific row list.
+		if len(m.ModelPicker.AvailableIDs) == 0 {
+			switch m.Cursor {
+			case 0:
+				m.ProfileCreateStep = 2
+				m.Cursor = 0
+			case 1:
+				if m.ProfileEditMode {
+					m.setScreen(ScreenProfiles)
+				} else {
+					m.ProfileCreateStep = 0
+					m.Cursor = 0
+				}
+			}
+			return m, nil
+		}
 		rows := screens.ModelPickerRowsForProfile()
 		if m.Cursor < len(rows) {
+			if m.Cursor == screens.SeparatorRowIdx() {
+				return m, nil
+			}
 			// Enter sub-selection: pick provider then model.
 			m.ModelPicker.SelectedPhaseIdx = m.Cursor
 			m.ModelPicker.Mode = screens.ModeProviderSelect
@@ -3925,19 +3962,20 @@ func (m Model) confirmProfileCreate() (tea.Model, tea.Cmd) {
 		if m.Cursor == len(rows) {
 			// "Continue": extract orchestrator + phase assignments, advance to confirm.
 			assignments := sanitizeKnownModelEfforts(m.Selection.ModelAssignments, m.ModelPicker.SDDModels)
-			if assignments != nil {
-				// Extract orchestrator model.
+			m.ProfileDraft.OrchestratorModel = model.ModelAssignment{}
+			m.ProfileDraft.PhaseAssignments = nil
+			if len(assignments) > 0 {
 				if orch, ok := assignments[screens.SDDOrchestratorPhase]; ok {
 					m.ProfileDraft.OrchestratorModel = orch
 				}
-				// Copy all phase assignments (excluding orchestrator).
-				if m.ProfileDraft.PhaseAssignments == nil {
-					m.ProfileDraft.PhaseAssignments = make(map[string]model.ModelAssignment)
-				}
+				phaseAssignments := make(map[string]model.ModelAssignment)
 				for k, v := range assignments {
 					if k != screens.SDDOrchestratorPhase {
-						m.ProfileDraft.PhaseAssignments[k] = v
+						phaseAssignments[k] = v
 					}
+				}
+				if len(phaseAssignments) > 0 {
+					m.ProfileDraft.PhaseAssignments = phaseAssignments
 				}
 			}
 			m.ProfileCreateStep = 2

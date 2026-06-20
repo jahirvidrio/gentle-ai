@@ -126,6 +126,7 @@ func TestProfileCreateContinueSanitizesStaleEffort(t *testing.T) {
 	m.ProfileDraft = model.Profile{Name: "work"}
 	m.Cursor = len(screens.ModelPickerRowsForProfile())
 	m.ModelPicker = screens.ModelPickerState{
+		AvailableIDs: []string{"anthropic"},
 		SDDModels: map[string][]opencode.Model{
 			"anthropic": {{ID: "claude-sonnet-4", Variants: []string{"low", "medium"}}},
 		},
@@ -154,6 +155,7 @@ func TestProfileEditContinueSanitizesStaleEffort(t *testing.T) {
 	m.ProfileDraft = model.Profile{Name: "work"}
 	m.Cursor = len(screens.ModelPickerRowsForProfile())
 	m.ModelPicker = screens.ModelPickerState{
+		AvailableIDs: []string{"anthropic"},
 		SDDModels: map[string][]opencode.Model{
 			"anthropic": {{ID: "claude-sonnet-4", Variants: []string{"low", "medium"}}},
 		},
@@ -180,7 +182,7 @@ func TestProfileCreateContinuePreservesEffortWhenVariantDataUnknown(t *testing.T
 	m.ProfileCreateStep = 1
 	m.ProfileDraft = model.Profile{Name: "work"}
 	m.Cursor = len(screens.ModelPickerRowsForProfile())
-	m.ModelPicker = screens.ModelPickerState{SDDModels: map[string][]opencode.Model{}}
+	m.ModelPicker = screens.ModelPickerState{AvailableIDs: []string{"anthropic"}, SDDModels: map[string][]opencode.Model{}}
 	m.Selection.ModelAssignments = map[string]model.ModelAssignment{
 		screens.SDDOrchestratorPhase: {ProviderID: "anthropic", ModelID: "claude-sonnet-4", Effort: "high"},
 		"sdd-apply":                  {ProviderID: "anthropic", ModelID: "claude-sonnet-4", Effort: "high"},
@@ -194,6 +196,124 @@ func TestProfileCreateContinuePreservesEffortWhenVariantDataUnknown(t *testing.T
 	}
 	if got := state.ProfileDraft.PhaseAssignments["sdd-apply"].Effort; got != "high" {
 		t.Fatalf("sdd-apply Effort = %q, want high when variant data is unknown", got)
+	}
+}
+
+func profileModelStep(available bool) Model {
+	m := NewModel(system.DetectionResult{}, "dev")
+	m.Screen = ScreenProfileCreate
+	m.ProfileCreateStep = 1
+	m.ModelPicker = screens.ModelPickerState{Mode: screens.ModePhaseList, ForProfile: true}
+	if available {
+		m.ModelPicker.AvailableIDs = []string{"openai"}
+	}
+	return m
+}
+
+func TestProfileCreateEmptyProviderEnterContinuesAndBacksOut(t *testing.T) {
+	keep := model.ModelAssignment{ProviderID: "anthropic", ModelID: "claude-sonnet-4", Effort: "high"}
+	orch := model.ModelAssignment{ProviderID: "openai", ModelID: "gpt-5"}
+
+	m := profileModelStep(false)
+	m.ProfileDraft = model.Profile{
+		Name:              "work",
+		OrchestratorModel: orch,
+		PhaseAssignments:  map[string]model.ModelAssignment{"sdd-apply": keep},
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	state := updated.(Model)
+
+	if state.ProfileCreateStep != 2 || state.Cursor != 0 {
+		t.Fatalf("step/cursor = %d/%d, want 2/0", state.ProfileCreateStep, state.Cursor)
+	}
+	if state.ProfileDraft.OrchestratorModel != orch {
+		t.Fatalf("orchestrator = %+v, want unchanged %+v", state.ProfileDraft.OrchestratorModel, orch)
+	}
+	if got := state.ProfileDraft.PhaseAssignments["sdd-apply"]; got != keep {
+		t.Fatalf("sdd-apply assignment = %+v, want unchanged %+v", got, keep)
+	}
+
+	back := profileModelStep(false)
+	back.Cursor = 1
+	updated, _ = back.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	state = updated.(Model)
+
+	if state.Screen != ScreenProfileCreate || state.ProfileCreateStep != 0 || state.Cursor != 0 {
+		t.Fatalf("screen/step/cursor = %v/%d/%d, want ScreenProfileCreate/0/0", state.Screen, state.ProfileCreateStep, state.Cursor)
+	}
+}
+
+func TestProfileCreateSeparatorIsIgnoredAndSkipped(t *testing.T) {
+	sepIdx := screens.SeparatorRowIdx()
+	if sepIdx < 0 {
+		t.Skip("no separator row defined")
+	}
+
+	m := profileModelStep(true)
+	m.Cursor = sepIdx
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	state := updated.(Model)
+
+	if state.ModelPicker.Mode != screens.ModePhaseList {
+		t.Fatalf("ModelPicker.Mode = %v, want ModePhaseList", state.ModelPicker.Mode)
+	}
+	if state.ModelPicker.SelectedPhaseIdx == sepIdx {
+		t.Fatalf("separator row should not become selected phase index %d", sepIdx)
+	}
+
+	state.Cursor = sepIdx - 1
+	updated, _ = state.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
+	state = updated.(Model)
+
+	if state.Cursor != sepIdx+1 {
+		t.Fatalf("cursor after j from row before separator = %d, want %d", state.Cursor, sepIdx+1)
+	}
+}
+
+func TestProfileCreateBackspaceClearsSelectedJDAssignment(t *testing.T) {
+	jdPhases := opencode.JDPhases()
+	if len(jdPhases) == 0 {
+		t.Skip("no JD phases defined")
+	}
+	target := jdPhases[0]
+	keep := model.ModelAssignment{ProviderID: "anthropic", ModelID: "claude-sonnet-4"}
+
+	m := profileModelStep(true)
+	m.ProfileEditMode = true
+	m.ProfileDraft = model.Profile{
+		Name: "work",
+		PhaseAssignments: map[string]model.ModelAssignment{
+			target:      {ProviderID: "openai", ModelID: "gpt-5"},
+			"sdd-apply": keep,
+		},
+	}
+	m.Cursor = screens.SeparatorRowIdx() + 1
+	m.Selection.ModelAssignments = map[string]model.ModelAssignment{
+		target:      {ProviderID: "openai", ModelID: "gpt-5"},
+		"sdd-apply": keep,
+	}
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	state := updated.(Model)
+
+	if _, exists := state.Selection.ModelAssignments[target]; exists {
+		t.Fatalf("%s should be cleared through the profile key handler; assignments = %v", target, state.Selection.ModelAssignments)
+	}
+	if got := state.Selection.ModelAssignments["sdd-apply"]; got != keep {
+		t.Fatalf("sdd-apply assignment = %+v, want unchanged %+v", got, keep)
+	}
+
+	state.Cursor = len(screens.ModelPickerRowsForProfile())
+	updated, _ = state.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	state = updated.(Model)
+
+	if _, exists := state.ProfileDraft.PhaseAssignments[target]; exists || state.ProfileCreateStep != 2 {
+		t.Fatalf("%s should stay cleared after continuing to confirm; draft = %+v", target, state.ProfileDraft.PhaseAssignments)
+	}
+	if got := state.ProfileDraft.PhaseAssignments["sdd-apply"]; got != keep {
+		t.Fatalf("draft sdd-apply assignment = %+v, want unchanged %+v", got, keep)
 	}
 }
 
