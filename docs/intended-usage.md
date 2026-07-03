@@ -8,11 +8,11 @@ This page explains how gentle-ai is meant to be used. Not the flags, not the arc
 
 ---
 
-## After Installing -- You're Done
+## After Installing -- You're Ready
 
-Once you run `gentle-ai` and select your agent(s), components, and preset, everything is configured. There is nothing else to do. No commands to memorize, no workflows to learn, no config files to edit.
+Once you run `gentle-ai` and select your agent(s), components, and preset, the ecosystem is configured for normal use. You do not need to memorize SDD phases, hand-edit generated config files, or manually wire the agent workflow.
 
-Open your AI agent and start working. That's it.
+Open your AI agent in a project and start working. For richer project context, the agent may run `/sdd-init` or refresh the skill registry automatically when SDD needs it. You can also run those manually, but they are not required for basic usage.
 
 ---
 
@@ -55,13 +55,23 @@ If you want the project-level OpenSpec config convention SDD phases use for conv
 
 ---
 
-## Multi-mode SDD (OpenCode SDD Profiles)
+## Multi-mode SDD -- Use It When Your Agent Supports It
 
-Multi-mode lets you assign different AI models to different SDD phases -- for example, a powerful model for design and a faster one for implementation. This is an OpenCode-exclusive feature, managed through **SDD Profiles**.
+Multi-mode lets you assign different AI models to different SDD phases -- for example, a powerful model for design and a faster one for implementation.
 
-For **all other agents** (Claude Code, Cursor, Gemini CLI, VS Code Copilot), SDD runs in single-mode automatically. One model handles everything, and that works perfectly fine.
+Support depends on the agent:
 
-If you want multi-mode in OpenCode:
+| Agent | How multi-mode works |
+| ----- | -------------------- |
+| **OpenCode** | SDD Profiles generate `gentle-orchestrator` plus phase sub-agents in `opencode.json` |
+| **Kilo Code** | OpenCode-compatible SDD profile overlay in `~/.config/kilo` |
+| **Kiro IDE** | Native phase agents with per-agent `model:` frontmatter |
+| **Pi** | Owned by `gentle-pi` through Pi-managed agents, chains, and model overrides |
+| **Others** | Single-mode SDD; one active model handles all phases |
+
+Single-mode is not a downgrade. It is the simpler default and works well. Multi-mode is useful when you deliberately want cost, speed, or reasoning tradeoffs per phase.
+
+If you want OpenCode profiles:
 
 1. Connect your AI providers in OpenCode first
 2. Create a profile via gentle-ai TUI ("OpenCode SDD Profiles") or CLI (`--profile` flag)
@@ -71,9 +81,11 @@ If you want multi-mode in OpenCode:
 
 You can create multiple profiles (e.g., "cheap" for experimentation, "premium" for production) and switch between them freely.
 
-If you prefer a **runtime profile manager** that keeps profiles outside `opencode.json`, gentle-ai now supports that too. During sync, OpenCode can auto-detect external profile files under `~/.config/opencode/profiles/*.json` and switch to a safer compatibility path that preserves the active `gentle-orchestrator` prompt instead of overwriting it.
+If you prefer a **runtime profile manager** that keeps profiles outside `opencode.json`, gentle-ai supports that too. During sync, OpenCode can auto-detect external profile files under `~/.config/opencode/profiles/*.json` and switch to a safer compatibility path that preserves the active `gentle-orchestrator` prompt instead of overwriting it.
 
 **Full step-by-step guide**: [OpenCode SDD Profiles](opencode-profiles.md)
+
+For the complete support matrix, see [Supported Agents](agents.md).
 
 ---
 
@@ -87,17 +99,17 @@ What makes them "super sub-agents":
 
 2. **They adapt to your project.** A `sdd-apply` sub-agent working on a React project receives React patterns. The same sub-agent working on a Go project receives Go testing conventions. The rules depend on the registry and task context, not a hardcoded list.
 
-3. **They persist their work.** Every sub-agent saves its artifacts to engram before returning. The next sub-agent in the pipeline can pick up exactly where the previous one left off, even across sessions.
+3. **They persist phase artifacts when the backend supports it.** In Engram-backed SDD flows, phase agents save artifacts before returning. The next phase can pick up from the stored proposal, spec, design, tasks, or apply progress -- even across sessions.
 
-This pattern works today on:
+This pattern works today in several delegation models:
 
-| Agent           | How sub-agents run                                                                                                              |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **OpenCode**    | Native sub-agent system — each phase is a dedicated agent with its own model, tools, and permissions defined in `opencode.json` |
-| **Claude Code** | Via the Agent tool — the orchestrator spawns focused sub-agents and injects resolved project rules                              |
-| **Others**      | SDD runs inline (single session) — the model follows the orchestrator instructions without spawning separate agents             |
+| Model | Agents | How it runs |
+| ----- | ------ | ----------- |
+| **Full sub-agents** | Claude Code, OpenCode, Kilo Code, Gemini CLI, Cursor, VS Code Copilot, Kimi Code, Kiro IDE, Qwen Code, Pi | Each SDD phase can run in a focused context through native delegation, package-managed subagents, or an OpenCode-compatible overlay |
+| **Hermes delegate_task** | Hermes | The orchestrator spawns ephemeral workers with self-contained missions and verifies their summaries before reporting success |
+| **Solo-agent** | Codex, Windsurf, Antigravity, OpenClaw, Trae | SDD phases run inline in one conversation; Engram still provides cross-phase persistence when available |
 
-You don't need to configure any of this. The installer sets it up, and the orchestrator manages delegation automatically.
+You don't need to configure any of this. The installer sets up the right model for your agent, and the orchestrator manages delegation automatically.
 
 ### Delegation Stop Rules
 
@@ -157,7 +169,7 @@ The less you think about gentle-ai after installing, the better it's working.
 | Run the installer, pick your agents and preset             | Manually edit the generated config files                                          |
 | Just start coding with your AI agent                       | Memorize SDD phases or commands                                                   |
 | Let the agent suggest SDD when a task is big enough        | Force SDD on every small task                                                     |
-| Trust that engram is saving context for you                | Dig into engram's storage unless you need `engram sync` or `engram tui`           |
-| Let startup hooks refresh the skill registry automatically | Manually rescan skills unless you need `gentle-ai skill-registry refresh --force` |
+| Trust that engram is saving context when installed and active | Dig into engram's storage unless you need `engram sync` or `engram tui`           |
+| Let startup hooks or SDD init refresh the skill registry      | Manually rescan skills unless you need `gentle-ai skill-registry refresh --force` |
 | Say "use sdd" if you know you want structured planning     | Worry about which SDD phase comes next                                            |
 | Re-run the installer to update or change your setup        | Manually patch skill files or persona instructions                                |
