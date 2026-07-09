@@ -13,12 +13,12 @@ var mvpComponents = []Component{
 	{ID: model.ComponentSDD, Name: "SDD", Description: "Spec-driven development workflow"},
 	{ID: model.ComponentSkills, Name: "Skills", Description: "Curated coding skill library"},
 	{ID: model.ComponentContext7, Name: "Context7", Description: "Latest framework and library docs"},
-	{ID: model.ComponentPersona, Name: "Persona", Description: "Gentleman, neutral or custom behavior"},
+	{ID: model.ComponentPersona, Name: "Persona", Description: "Managed agent behavior and conversation tone"},
 	{ID: model.ComponentPermission, Name: "Permissions", Description: "Security-first defaults and guardrails"},
 	{ID: model.ComponentGGA, Name: "GGA", Description: "Gentleman Guardian Angel — AI provider switcher"},
-	{ID: model.ComponentTheme, Name: "Theme", Description: "Gentleman Kanagawa theme overlay"},
-	{ID: model.ComponentClaudeTheme, Name: "Claude Gentleman Theme", Description: "Claude Code Gentleman custom theme"},
-	{ID: model.ComponentOpenCodeGentleLogo, Name: "OpenCode Gentle Logo", Description: "OpenCode home logo TUI plugin with Braille rose"},
+	{ID: model.ComponentTheme, Name: "OpenCode Theme", Description: "Visual polish: OpenCode color theme"},
+	{ID: model.ComponentClaudeTheme, Name: "Claude Code Theme", Description: "Visual polish: Claude Code color theme"},
+	{ID: model.ComponentOpenCodeGentleLogo, Name: "OpenCode Logo", Description: "Visual polish: OpenCode home logo plugin"},
 }
 
 func MVPComponents() []Component {

@@ -305,9 +305,9 @@ test_dry_run_full_preset_persona_before_sdd() {
 }
 
 test_preset_no_legacy_theme_in_any_preset() {
-    log_test "Legacy theme component is NOT in any preset"
+    log_test "Only Dev Stack + Polish includes the OpenCode theme component"
 
-    for preset in minimal ecosystem-only full-gentleman; do
+    for preset in minimal ecosystem-only; do
         output=$($BINARY install --preset "$preset" --agent claude-code --dry-run 2>&1) || true
         local components_line
         components_line=$(echo "$output" | grep "Components order:")
@@ -315,11 +315,23 @@ test_preset_no_legacy_theme_in_any_preset() {
         order_str=${components_line#*Components order:}
         order_str=${order_str# }
         if echo "$order_str" | tr ',' '\n' | grep -qx "theme"; then
-            log_fail "Preset '$preset' unexpectedly includes legacy theme component"
+            log_fail "Preset '$preset' unexpectedly includes OpenCode theme component"
         else
-            log_pass "Preset '$preset' does NOT include legacy theme component"
+            log_pass "Preset '$preset' does NOT include OpenCode theme component"
         fi
     done
+
+    output=$($BINARY install --preset full-gentleman --agent claude-code --dry-run 2>&1) || true
+    local components_line
+    components_line=$(echo "$output" | grep "Components order:")
+    local order_str
+    order_str=${components_line#*Components order:}
+    order_str=${order_str# }
+    if echo "$order_str" | tr ',' '\n' | grep -qx "theme"; then
+        log_pass "Preset 'full-gentleman' includes OpenCode theme component"
+    else
+        log_fail "Preset 'full-gentleman' must include OpenCode theme component"
+    fi
 }
 
 test_preset_custom_no_components() {

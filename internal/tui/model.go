@@ -4038,30 +4038,7 @@ func (m *Model) applyPickerEntry(next Screen) {
 }
 
 func componentsForPreset(preset model.PresetID, persona model.PersonaID) []model.ComponentID {
-	var components []model.ComponentID
-	switch preset {
-	case model.PresetMinimal:
-		components = []model.ComponentID{model.ComponentEngram}
-	case model.PresetEcosystemOnly:
-		components = []model.ComponentID{model.ComponentEngram, model.ComponentSDD, model.ComponentSkills, model.ComponentContext7, model.ComponentGGA}
-	case model.PresetCustom:
-		return nil
-	default: // full-gentleman
-		components = []model.ComponentID{
-			model.ComponentEngram,
-			model.ComponentSDD,
-			model.ComponentSkills,
-			model.ComponentContext7,
-			model.ComponentPermission,
-			model.ComponentGGA,
-			model.ComponentClaudeTheme,
-			model.ComponentOpenCodeGentleLogo,
-		}
-	}
-	if persona != model.PersonaCustom {
-		components = append(components, model.ComponentPersona)
-	}
-	return components
+	return model.ComponentsForPreset(preset, persona)
 }
 
 func hasSelectedComponent(components []model.ComponentID, target model.ComponentID) bool {

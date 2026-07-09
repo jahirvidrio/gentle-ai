@@ -17,6 +17,84 @@ import (
 
 type stubSnapshotter struct{}
 
+func TestExpandVisualPolishUninstallComponents(t *testing.T) {
+	for _, trigger := range model.VisualPolishComponents() {
+		t.Run(string(trigger), func(t *testing.T) {
+			got := expandVisualPolishUninstallComponents([]model.ComponentID{trigger})
+			for _, want := range model.VisualPolishComponents() {
+				if !slices.Contains(got, want) {
+					t.Fatalf("expanded visual polish components missing %q: %v", want, got)
+				}
+			}
+		})
+	}
+
+	unchanged := expandVisualPolishUninstallComponents([]model.ComponentID{model.ComponentPersona})
+	if !slices.Equal(unchanged, []model.ComponentID{model.ComponentPersona}) {
+		t.Fatalf("non-polish components should not expand: %v", unchanged)
+	}
+}
+
+func TestPartialUninstallVisualPolishSelectionRemovesThemeLogoGroup(t *testing.T) {
+	homeDir := t.TempDir()
+	workspaceDir := t.TempDir()
+
+	svc, err := NewService(homeDir, workspaceDir, "dev")
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	svc.snapshotter = stubSnapshotter{}
+
+	opencodeAdapter, ok := svc.registry.Get(model.AgentOpenCode)
+	if !ok {
+		t.Fatal("opencode adapter not found in registry")
+	}
+	settingsPath := opencodeAdapter.SettingsPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(opencode settings dir) error = %v", err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"theme":"gentleman-kanagawa","keep":true}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(opencode settings) error = %v", err)
+	}
+
+	logoPath := filepath.Join(homeDir, ".config", "opencode", "tui-plugins", "gentle-logo.tsx")
+	if err := os.MkdirAll(filepath.Dir(logoPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(logo dir) error = %v", err)
+	}
+	if err := os.WriteFile(logoPath, []byte("// managed logo"), 0o644); err != nil {
+		t.Fatalf("WriteFile(logo) error = %v", err)
+	}
+
+	claudeThemePath := filepath.Join(homeDir, ".claude", "themes", "gentleman.json")
+	if err := os.MkdirAll(filepath.Dir(claudeThemePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(claude theme dir) error = %v", err)
+	}
+	if err := os.WriteFile(claudeThemePath, []byte(`{"name":"Gentleman"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(claude theme) error = %v", err)
+	}
+
+	if _, err := svc.PartialUninstall(
+		[]model.AgentID{model.AgentOpenCode, model.AgentClaudeCode},
+		[]model.ComponentID{model.ComponentTheme},
+	); err != nil {
+		t.Fatalf("PartialUninstall() error = %v", err)
+	}
+
+	settings := readJSONFileForTest(t, settingsPath)
+	if _, exists := settings["theme"]; exists {
+		t.Fatalf("theme should be removed from OpenCode settings: %#v", settings)
+	}
+	if got := settings["keep"]; got != true {
+		t.Fatalf("user setting should be preserved, got %#v", got)
+	}
+	if _, err := os.Stat(logoPath); !os.IsNotExist(err) {
+		t.Fatalf("OpenCode logo should be removed by visual polish group uninstall, err = %v", err)
+	}
+	if _, err := os.Stat(claudeThemePath); !os.IsNotExist(err) {
+		t.Fatalf("Claude theme should be removed by visual polish group uninstall, err = %v", err)
+	}
+}
+
 func readJSONFileForTest(t *testing.T, path string) map[string]any {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -218,6 +218,7 @@ func (s *Service) PartialUninstall(agentIDs []model.AgentID, componentIDs []mode
 	if len(components) == 0 {
 		components = slices.Clone(allManagedComponents)
 	}
+	components = expandVisualPolishUninstallComponents(components)
 
 	plan, err := s.buildPlan(agentIDs, components)
 	if err != nil {
@@ -245,6 +246,7 @@ func (s *Service) PartialUninstallWithProfiles(agentIDs []model.AgentID, compone
 	if len(components) == 0 {
 		components = slices.Clone(allManagedComponents)
 	}
+	components = expandVisualPolishUninstallComponents(components)
 
 	plan, err := s.buildPlan(agentIDs, components)
 	if err != nil {
@@ -253,6 +255,27 @@ func (s *Service) PartialUninstallWithProfiles(agentIDs []model.AgentID, compone
 
 	stateRemovals := stateAgentsToRemove(agentIDs, components)
 	return s.executePlan(plan, stateRemovals)
+}
+
+func expandVisualPolishUninstallComponents(components []model.ComponentID) []model.ComponentID {
+	shouldExpand := false
+	visualPolish := model.VisualPolishComponents()
+	for _, component := range components {
+		if slices.Contains(visualPolish, component) {
+			shouldExpand = true
+		}
+	}
+	if !shouldExpand {
+		return components
+	}
+
+	expanded := slices.Clone(components)
+	for _, component := range model.VisualPolishComponents() {
+		if !slices.Contains(expanded, component) {
+			expanded = append(expanded, component)
+		}
+	}
+	return expanded
 }
 
 func (s *Service) SetProfileNamesToRemove(profileNames []string) {
