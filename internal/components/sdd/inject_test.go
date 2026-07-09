@@ -6069,11 +6069,18 @@ func TestInject_CodexPerPhaseModelAssignments_InjectsPerPhaseTable(t *testing.T)
 	home := t.TempDir()
 	adapter := codexInjectAdapter()
 
-	// Custom per-phase: sdd-propose gets gpt-5.4.
+	// Custom per-phase: sdd-propose gets gpt-5.4, while unassigned phases
+	// preserve the selected/saved carril models instead of reverting to the
+	// Recommended preset.
 	opts := InjectOptions{
 		CodexModelAssignments: model.CodexModelPresetRecommended(),
 		CodexPhaseModelAssignments: map[string]string{
 			"sdd-propose": "gpt-5.4",
+		},
+		CodexCarrilModelAssignments: map[string]string{
+			"sdd-strong": "gpt-5.4-mini",
+			"sdd-mid":    "gpt-5.5",
+			"sdd-cheap":  "gpt-5.3-codex",
 		},
 	}
 
@@ -6104,7 +6111,20 @@ func TestInject_CodexPerPhaseModelAssignments_InjectsPerPhaseTable(t *testing.T)
 	if !strings.Contains(text, wantRow) {
 		t.Errorf("AGENTS.md missing expected sdd-propose row %q:\n%s", wantRow, text)
 	}
-	// No unresolved placeholders.
+	// An unassigned strong phase must preserve the supplied carril model.
+	wantFallbackRow := "| `sdd-design` | `gpt-5.4-mini` | `high` |"
+	if !strings.Contains(text, wantFallbackRow) {
+		t.Errorf("AGENTS.md missing preserved carril fallback row %q:\n%s", wantFallbackRow, text)
+	}
+	// The delegation example must refer readers back to the generated table,
+	// not hardcode values that are wrong for some presets.
+	if strings.Contains(text, `model="gpt-5.6-sol", reasoning_effort="xhigh"`) {
+		t.Errorf("AGENTS.md contains a hardcoded delegation example that can contradict the generated table:\n%s", text)
+	}
+	if !strings.Contains(text, `model="<assigned-model>"`) || !strings.Contains(text, `reasoning_effort="<assigned-effort>"`) {
+		t.Errorf("AGENTS.md delegation example must use assigned-value placeholders:\n%s", text)
+	}
+	// No unresolved template placeholders.
 	if strings.Contains(text, "{{") {
 		t.Errorf("AGENTS.md contains unresolved placeholder '{{' after Inject:\n%s", text)
 	}

@@ -382,7 +382,7 @@ func TestRenderCodexPhaseEfforts_NonDefaultModel(t *testing.T) {
 
 func TestCodexAvailableModels_Contents(t *testing.T) {
 	models := model.CodexAvailableModels()
-	want := []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.2-codex", "gpt-5.3-codex"}
+	want := []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex", "gpt-5.2-codex"}
 	if len(models) != len(want) {
 		t.Fatalf("CodexAvailableModels() len = %d, want %d", len(models), len(want))
 	}
@@ -487,7 +487,7 @@ func TestRenderCodexPhaseEffortsByPhase_AllPhasesPresent(t *testing.T) {
 		"sdd-apply":   "gpt-5.4",
 	}
 	efforts := model.CodexModelPresetRecommended()
-	out := model.RenderCodexPhaseEffortsByPhase(phaseModels, efforts)
+	out := model.RenderCodexPhaseEffortsByPhase(phaseModels, efforts, nil)
 
 	phases := []string{
 		"sdd-explore", "sdd-propose", "sdd-spec", "sdd-design", "sdd-tasks",
@@ -509,7 +509,7 @@ func TestRenderCodexPhaseEffortsByPhase_CustomModelShown(t *testing.T) {
 		"sdd-propose": "gpt-5.4",
 	}
 	efforts := model.CodexModelPresetRecommended()
-	out := model.RenderCodexPhaseEffortsByPhase(phaseModels, efforts)
+	out := model.RenderCodexPhaseEffortsByPhase(phaseModels, efforts, nil)
 
 	// The sdd-propose row must contain exactly | `sdd-propose` | `gpt-5.4` |
 	// (not gpt-5.4-mini or any other model that happens to contain "gpt-5.4").
@@ -524,7 +524,7 @@ func TestRenderCodexPhaseEffortsByPhase_CustomModelShown(t *testing.T) {
 func TestRenderCodexPhaseEffortsByPhase_UnassignedUsesDefaultModel(t *testing.T) {
 	// No custom models — all phases should use carril defaults.
 	efforts := model.CodexModelPresetRecommended()
-	out := model.RenderCodexPhaseEffortsByPhase(nil, efforts)
+	out := model.RenderCodexPhaseEffortsByPhase(nil, efforts, nil)
 
 	// sdd-explore is in sdd-cheap carril → gpt-5.6-luna.
 	if !strings.Contains(out, "gpt-5.6-luna") {
@@ -532,10 +532,34 @@ func TestRenderCodexPhaseEffortsByPhase_UnassignedUsesDefaultModel(t *testing.T)
 	}
 }
 
+func TestRenderCodexPhaseEffortsByPhase_UnassignedUsesProvidedCarrilModel(t *testing.T) {
+	out := model.RenderCodexPhaseEffortsByPhase(
+		map[string]string{"sdd-propose": "gpt-5.4"},
+		model.CodexModelPresetRecommended(),
+		map[string]string{
+			"sdd-strong": "gpt-5.4-mini",
+			"sdd-mid":    "gpt-5.5",
+			"sdd-cheap":  "gpt-5.3-codex",
+		},
+	)
+
+	wantRows := []string{
+		"| `sdd-propose` | `gpt-5.4` | `high` |",
+		"| `sdd-design` | `gpt-5.4-mini` | `high` |",
+		"| `sdd-apply` | `gpt-5.5` | `medium` |",
+		"| `sdd-explore` | `gpt-5.3-codex` | `low` |",
+	}
+	for _, wantRow := range wantRows {
+		if !strings.Contains(out, wantRow) {
+			t.Errorf("RenderCodexPhaseEffortsByPhase missing row %q; output:\n%s", wantRow, out)
+		}
+	}
+}
+
 // TestRenderCodexPhaseEffortsByPhase_HeaderPresent verifies the table has a
 // Phase column header.
 func TestRenderCodexPhaseEffortsByPhase_HeaderPresent(t *testing.T) {
-	out := model.RenderCodexPhaseEffortsByPhase(nil, model.CodexModelPresetRecommended())
+	out := model.RenderCodexPhaseEffortsByPhase(nil, model.CodexModelPresetRecommended(), nil)
 	if !strings.Contains(out, "Phase") {
 		t.Errorf("RenderCodexPhaseEffortsByPhase: missing 'Phase' header; output:\n%s", out)
 	}

@@ -16,8 +16,8 @@ var codexModelCatalog = []string{
 	"gpt-5.5",
 	"gpt-5.4",
 	"gpt-5.4-mini",
-	"gpt-5.2-codex",
 	"gpt-5.3-codex",
+	"gpt-5.2-codex",
 }
 
 // CodexAvailableModels returns Gentle AI's curated selectable Codex model
@@ -98,6 +98,9 @@ var codexPresetMatrix = map[CodexPresetKey]map[string]CodexCarrilDefault{
 	},
 }
 
+// CodexPresetCarrilDefaults returns a defensive copy of the selected preset's
+// carril defaults. The string boundary preserves compatibility with persisted
+// state; unknown keys intentionally fall back to Recommended.
 func CodexPresetCarrilDefaults(preset string) map[string]CodexCarrilDefault {
 	defaults, ok := codexPresetMatrix[CodexPresetKey(preset)]
 	if !ok {
@@ -110,6 +113,8 @@ func CodexPresetCarrilDefaults(preset string) map[string]CodexCarrilDefault {
 	return out
 }
 
+// CodexCarrilModelsForPreset returns the model portion of a preset's carril
+// defaults. Unknown persisted keys inherit the Recommended fallback policy.
 func CodexCarrilModelsForPreset(preset string) map[string]string {
 	defaults := CodexPresetCarrilDefaults(preset)
 	out := make(map[string]string, len(defaults))
@@ -309,16 +314,20 @@ func phaseToCarrilModel(phase string, carrilModels map[string]string) string {
 // active. Each row shows: phase | model | reasoning_effort.
 //
 // phaseModels maps phase names to custom model IDs. Phases not present in
-// phaseModels fall back to the carril default model. efforts maps phase names to
-// CodexEffort values (typically from a preset + user overrides). When efforts is
-// nil, CodexModelPresetRecommended is used.
+// phaseModels fall back to carrilModels, preserving the selected or explicitly
+// saved carril assignments. efforts maps phase names to CodexEffort values
+// (typically from a preset + user overrides). When efforts is nil,
+// CodexModelPresetRecommended is used. When carrilModels is nil, the canonical
+// Recommended carril models are used.
 //
 // The output is deterministic: phases are always rendered in codexPhaseOrder.
-func RenderCodexPhaseEffortsByPhase(phaseModels map[string]string, efforts map[string]CodexEffort) string {
+func RenderCodexPhaseEffortsByPhase(phaseModels map[string]string, efforts map[string]CodexEffort, carrilModels map[string]string) string {
 	if len(efforts) == 0 {
 		efforts = CodexModelPresetRecommended()
 	}
-	carrilModels := DefaultCarrilModels()
+	if len(carrilModels) == 0 {
+		carrilModels = DefaultCarrilModels()
+	}
 
 	var sb strings.Builder
 	sb.WriteString("| Phase | Model | `reasoning_effort` |\n")

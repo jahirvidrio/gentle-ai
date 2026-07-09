@@ -138,9 +138,9 @@ For each phase:
 5. `close_agent` to release the thread.
 6. Verify the artifact was persisted before launching the next phase.
 
-Example — launching `sdd-design` with its assigned model and effort:
+Example — launching `sdd-design` with the values from its generated table row:
 ```
-spawn_agent(task_name="sdd-design", message=<design prompt>, model="gpt-5.6-sol", reasoning_effort="xhigh", fork_turns="none")
+spawn_agent(task_name="sdd-design", message=<design prompt>, model="<assigned-model>", reasoning_effort="<assigned-effort>", fork_turns="none")
 wait_agent(task_name="sdd-design")
 close_agent(task_name="sdd-design")
 ```

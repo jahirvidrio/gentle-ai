@@ -1842,8 +1842,13 @@ func injectFileAppend(homeDir string, adapter agents.Adapter, opts InjectOptions
 	if cmr, ok := adapter.(codexModelResolver); ok {
 		var rendered string
 		if len(opts.CodexPhaseModelAssignments) > 0 {
-			// Custom per-phase mode: render a per-phase table (phase | model | effort).
-			rendered = model.RenderCodexPhaseEffortsByPhase(opts.CodexPhaseModelAssignments, opts.CodexModelAssignments)
+			// Custom per-phase mode: render a per-phase table (phase | model | effort),
+			// preserving the selected or explicitly saved carril models as fallbacks.
+			rendered = model.RenderCodexPhaseEffortsByPhase(
+				opts.CodexPhaseModelAssignments,
+				opts.CodexModelAssignments,
+				opts.CodexCarrilModelAssignments,
+			)
 		} else {
 			// Preset / carril mode: render the standard per-carril table.
 			rendered = cmr.RenderCodexPhaseEfforts(opts.CodexModelAssignments, opts.CodexCarrilModelAssignments)
