@@ -1,7 +1,6 @@
 package communitytool
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -199,9 +198,7 @@ func reconcileDetectedPiCodeGraph(homeDir, workspaceDir string) (*PiCodeGraphRes
 		return nil, err
 	}
 	result, err := ReconcilePiCodeGraph(PiCodeGraphOptions{HomeDir: homeDir, WorkspaceDir: workspaceDir, Selected: true})
-	if errors.Is(err, ErrPiCodeGraphAdapterHealthUnavailable) {
-		return &PiCodeGraphResult{ManualActions: []string{"Pi CodeGraph integration is pending: Pi 0.80.6 has no supported machine-verifiable adapter health signal. CodeGraph capability was not reported as configured."}}, nil
-	}
+	result, err = PreservePiCodeGraphPending(result, err)
 	return &result, err
 }
 

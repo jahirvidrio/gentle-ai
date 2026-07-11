@@ -520,7 +520,7 @@ func (r *installRuntime) stagePlan() pipeline.StagePlan {
 	}
 
 	for _, tool := range r.selection.CommunityTools {
-		apply = append(apply, communityToolInstallStep{id: "community-tool:" + string(tool), tool: tool, workspaceDir: r.workspaceDir, homeDir: r.homeDir})
+		apply = append(apply, communityToolInstallStep{id: "community-tool:" + string(tool), tool: tool, workspaceDir: r.workspaceDir, homeDir: r.homeDir, state: r.state})
 	}
 
 	for _, component := range r.resolved.OrderedComponents {
@@ -555,9 +555,12 @@ type piCodeGraphReconcileStep struct {
 	state                     *runtimeState
 }
 
+var reconcilePiCodeGraph = communitytool.ReconcilePiCodeGraph
+
 func (s piCodeGraphReconcileStep) ID() string { return s.id }
 func (s piCodeGraphReconcileStep) Run() error {
-	result, err := communitytool.ReconcilePiCodeGraph(communitytool.PiCodeGraphOptions{HomeDir: s.homeDir, WorkspaceDir: s.workspaceDir, Selected: s.selected})
+	result, err := reconcilePiCodeGraph(communitytool.PiCodeGraphOptions{HomeDir: s.homeDir, WorkspaceDir: s.workspaceDir, Selected: s.selected})
+	result, err = communitytool.PreservePiCodeGraphPending(result, err)
 	if err == nil && s.state != nil {
 		s.state.piCodeGraph = &result
 	}
@@ -755,14 +758,18 @@ type communityToolInstallStep struct {
 	tool         model.CommunityToolID
 	workspaceDir string
 	homeDir      string
+	state        *runtimeState
 }
 
 func (s communityToolInstallStep) ID() string { return s.id }
 
 func (s communityToolInstallStep) Run() error {
-	_, err := installCommunityToolWithHome(s.tool, s.workspaceDir, s.homeDir, communitytool.RunnerFunc(runCommand), communitytool.DetectorFunc(cmdLookPath))
+	result, err := installCommunityToolWithHome(s.tool, s.workspaceDir, s.homeDir, communitytool.RunnerFunc(runCommand), communitytool.DetectorFunc(cmdLookPath))
 	if err != nil {
 		return fmt.Errorf("install community tool %q: %w", s.tool, err)
+	}
+	if result.PiCodeGraph != nil && s.state != nil {
+		s.state.piCodeGraph = result.PiCodeGraph
 	}
 	return nil
 }

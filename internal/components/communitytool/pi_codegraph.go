@@ -38,6 +38,8 @@ var piCodeGraphEffectiveMCPProbe PiCodeGraphEffectiveMCPProbe = probePiCodeGraph
 // verification remains separate capability evidence.
 var ErrPiCodeGraphAdapterHealthUnavailable = errors.New("Pi MCP adapter health is not machine-verifiable")
 
+const piCodeGraphPendingAction = "Pi CodeGraph integration is pending: Pi 0.80.6 has no supported machine-verifiable adapter health signal. CodeGraph capability was not reported as configured."
+
 // piCodeGraphAdapterRuntimeRunner is the Pi subprocess boundary. It captures
 // combined stdout/stderr so exit status alone cannot be mistaken for adapter
 // health.
@@ -98,6 +100,40 @@ type PiCodeGraphMCPProbeResult struct {
 	AdapterAvailable bool
 	Initialized      bool
 	Tools            []PiCodeGraphMCPTool
+}
+
+// PreservePiCodeGraphPending converts only unavailable adapter-health evidence
+// into the manual action used while Pi has no verifiable health signal.
+func PreservePiCodeGraphPending(result PiCodeGraphResult, err error) (PiCodeGraphResult, error) {
+	if !isExclusivePiCodeGraphPending(err) {
+		return result, err
+	}
+	if !slices.Contains(result.ManualActions, piCodeGraphPendingAction) {
+		result.ManualActions = append(result.ManualActions, piCodeGraphPendingAction)
+	}
+	return result, nil
+}
+
+func isExclusivePiCodeGraphPending(err error) bool {
+	if err == ErrPiCodeGraphAdapterHealthUnavailable {
+		return true
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		children := joined.Unwrap()
+		if len(children) == 0 {
+			return false
+		}
+		for _, child := range children {
+			if !isExclusivePiCodeGraphPending(child) {
+				return false
+			}
+		}
+		return true
+	}
+	if wrapped, ok := err.(interface{ Unwrap() error }); ok {
+		return isExclusivePiCodeGraphPending(wrapped.Unwrap())
+	}
+	return false
 }
 
 // PiCodeGraphEffectiveMCPProbe initializes the configured MCP server through
@@ -545,6 +581,11 @@ func validatePiCodeGraphAdapterRuntimeOutput(output []byte) error {
 		"adapter load error",
 		"error loading mcp",
 		"mcp adapter error",
+		"not ready",
+		"not running",
+		"unloaded",
+		"inactive",
+		"broken",
 		"not connected",
 		"disconnected",
 	}
