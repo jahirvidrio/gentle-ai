@@ -246,6 +246,40 @@ func TestReadCurrentModelAssignmentsSlashSeparator(t *testing.T) {
 	}
 }
 
+// TestReadCurrentModelAssignmentsOpenRouterFreeModel verifies that model specs
+// with multiple slashes and a colon (like "openrouter/qwen/qwen3.6-plus:free")
+// are parsed correctly. The provider is everything before the FIRST separator
+// (slash or colon), not before the colon. Issue #802.
+func TestReadCurrentModelAssignmentsOpenRouterFreeModel(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "opencode.json")
+
+	content := `{
+  "agent": {
+    "sdd-apply": { "model": "openrouter/qwen/qwen3.6-plus:free" }
+  }
+}`
+	if err := os.WriteFile(settingsPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write settings: %v", err)
+	}
+
+	got, err := ReadCurrentModelAssignments(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadCurrentModelAssignments() error = %v", err)
+	}
+
+	a, ok := got["sdd-apply"]
+	if !ok {
+		t.Fatal("sdd-apply missing from result — OpenRouter free-model format not parsed")
+	}
+	if a.ProviderID != "openrouter" {
+		t.Errorf("ProviderID = %q, want %q", a.ProviderID, "openrouter")
+	}
+	if a.ModelID != "qwen/qwen3.6-plus:free" {
+		t.Errorf("ModelID = %q, want %q", a.ModelID, "qwen/qwen3.6-plus:free")
+	}
+}
+
 // TestReadCurrentModelAssignmentsReadsVariant verifies that the
 // variant field in an agent definition is populated on the returned
 // ModelAssignment.Effort.

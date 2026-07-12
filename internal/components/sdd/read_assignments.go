@@ -2,7 +2,6 @@ package sdd
 
 import (
 	"os"
-	"strings"
 
 	"github.com/gentleman-programming/gentle-ai/internal/components/filemerge"
 	"github.com/gentleman-programming/gentle-ai/internal/model"
@@ -79,19 +78,8 @@ func ReadCurrentModelAssignments(settingsPath string) (map[string]model.ModelAss
 		if !ok || modelStr == "" {
 			continue
 		}
-		// Try colon first (standard: "anthropic:claude-sonnet-4"), then slash
-		// ("zai-coding-plan/glm-5-turbo") for custom providers (issue #152).
-		idx := strings.Index(modelStr, ":")
-		if idx <= 0 {
-			idx = strings.Index(modelStr, "/")
-		}
-		if idx <= 0 {
-			// No separator or separator is the first character — skip malformed value.
-			continue
-		}
-		providerID := modelStr[:idx]
-		modelID := modelStr[idx+1:]
-		if modelID == "" {
+		providerID, modelID, ok := model.SplitModelSpec(modelStr)
+		if !ok {
 			continue
 		}
 		assignmentKey := name
