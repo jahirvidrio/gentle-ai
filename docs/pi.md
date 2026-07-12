@@ -73,8 +73,9 @@ Select CodeGraph during Gentle AI installation to add its read-only MCP server t
 | --- | --- |
 | MCP | Merges `mcpServers.codegraph` with `codegraph serve --mcp`; a conflicting user entry is reported, never overwritten. |
 | Children | Discovers effective user and project Pi child definitions. Compatible children (`bash` plus explicit tools) receive `mcp`; every readable child receives lazy-init guidance. |
-| Indexes | Guidance resolves a safe project root, initializes a missing `.codegraph/` once, then uses CodeGraph. It reports why it falls back after an init/use failure. |
-| Sync | `gentle-ai sync` reconciles the owned manifest after Pi assets refresh, restoring missing overlays without duplicates. |
+| Intelligence | Prefers `codegraph_explore`; when MCP is unavailable, guidance uses the upstream CLI's read-only intelligence commands directly rather than routing them through Gentle AI. |
+| Indexes | Guidance resolves a safe project root, initializes a missing `.codegraph/` once, relies on watcher auto-sync after edits, and uses `codegraph sync` only for stale/disabled-watcher recovery. Full rebuild and destructive/admin commands are excluded from routine agent use. |
+| Sync | `gentle-ai sync` reconciles the owned manifest after Pi assets refresh, restoring missing overlays without duplicates. This configuration sync is separate from upstream index freshness. |
 | Removal | Uninstall removes only manifest-owned MCP and child blocks. Drifted child files are preserved and reported for manual review. |
 
 Package-owned child files are never edited. Gentle AI creates a same-name overlay in Pi's agent directory when needed. A parent `APPEND_SYSTEM.md` CodeGraph marker is not considered proof that any child has CodeGraph tools or guidance.
