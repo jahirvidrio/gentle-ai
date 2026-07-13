@@ -538,6 +538,11 @@ func TestInjectOpenCodeIsIdempotent(t *testing.T) {
 	if !first.Changed {
 		t.Fatalf("Inject() first changed = false")
 	}
+	settingsPath := opencodeAdapter().SettingsPath(home)
+	firstSettings, err := os.ReadFile(settingsPath)
+	if err != nil || !bytes.Contains(firstSettings, []byte(`"default_agent": "gentle-orchestrator"`)) {
+		t.Fatalf("first settings missing managed default: %s, err = %v", firstSettings, err)
+	}
 
 	second, err := Inject(home, opencodeAdapter(), "")
 	if err != nil {
@@ -5661,7 +5666,7 @@ func TestInjectOpenCodeWithProfile_StaleJDCleanupAcceptsJSONCSettings(t *testing
 	}
 }
 
-func TestInjectOpenCodeWithProfile_StaleJDCleanupDoesNotRejectMalformedSettings(t *testing.T) {
+func TestInjectOpenCodeRejectsMalformedSettingsBeforeWrites(t *testing.T) {
 	home := t.TempDir()
 	mockNoPackageManager(t)
 
@@ -5677,20 +5682,16 @@ func TestInjectOpenCodeWithProfile_StaleJDCleanupDoesNotRejectMalformedSettings(
 		Name:              "cheap",
 		OrchestratorModel: model.ModelAssignment{ProviderID: "anthropic", ModelID: "claude-haiku-3-5"},
 	}
-	if _, err := Inject(home, opencodeAdapter(), model.SDDModeMulti, InjectOptions{Profiles: []model.Profile{profileWithoutJD}}); err != nil {
-		t.Fatalf("Inject() should preserve merge behavior for malformed opencode settings: %v", err)
+	before, _ := os.ReadFile(settingsPath)
+	if _, err := Inject(home, opencodeAdapter(), model.SDDModeMulti, InjectOptions{Profiles: []model.Profile{profileWithoutJD}}); err == nil {
+		t.Fatal("Inject() accepted malformed opencode settings")
 	}
-
-	content, err := os.ReadFile(settingsPath)
-	if err != nil {
-		t.Fatalf("ReadFile(opencode.json): %v", err)
+	after, _ := os.ReadFile(settingsPath)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("malformed settings changed: %q", after)
 	}
-	var root map[string]any
-	if err := json.Unmarshal(content, &root); err != nil {
-		t.Fatalf("opencode.json should be recovered as valid JSON: %v", err)
-	}
-	if _, ok := root["agent"].(map[string]any)["sdd-orchestrator-cheap"]; !ok {
-		t.Fatal("profile orchestrator missing after malformed settings recovery")
+	if _, err := os.Stat(filepath.Join(home, ".config", "opencode", "commands")); !os.IsNotExist(err) {
+		t.Fatalf("commands were written before settings validation: %v", err)
 	}
 }
 

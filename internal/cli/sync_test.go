@@ -2357,6 +2357,13 @@ func TestRunSyncWithSelection_IsIdempotent(t *testing.T) {
 		Components: []model.ComponentID{model.ComponentSDD, model.ComponentEngram, model.ComponentContext7, model.ComponentGGA, model.ComponentSkills},
 		SDDMode:    model.SDDModeSingle,
 	}
+	settingsPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"default_agent":"user-agent","keep":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// Run 1: files written.
 	result1, err := RunSyncWithSelection(home, sel)
@@ -2365,6 +2372,10 @@ func TestRunSyncWithSelection_IsIdempotent(t *testing.T) {
 	}
 	if result1.FilesChanged == 0 {
 		t.Fatalf("run 1: FilesChanged = 0, expected > 0")
+	}
+	firstSettings, _ := os.ReadFile(settingsPath)
+	if !bytes.Contains(firstSettings, []byte(`"default_agent": "gentle-orchestrator"`)) {
+		t.Fatalf("TUI sync did not overwrite default_agent: %s", firstSettings)
 	}
 
 	// Run 2: nothing changed.
@@ -2377,6 +2388,10 @@ func TestRunSyncWithSelection_IsIdempotent(t *testing.T) {
 	}
 	if !result2.NoOp {
 		t.Errorf("run 2: NoOp = false, want true (all assets already current)")
+	}
+	secondSettings, _ := os.ReadFile(settingsPath)
+	if !bytes.Equal(firstSettings, secondSettings) {
+		t.Fatal("TUI sync was not byte-idempotent")
 	}
 }
 
@@ -2971,6 +2986,10 @@ func TestRunSyncDoesNotOverridePersistedAssignmentsOnSecondSync(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(home, ".config", "opencode"), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
+	settingsPath := filepath.Join(home, ".config", "opencode", "opencode.json")
+	if err := os.WriteFile(settingsPath, []byte(`{"default_agent":"user-agent","keep":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	err := state.Write(home, state.InstallState{
 		InstalledAgents: []string{"opencode"},
 		ClaudeModelAssignments: map[string]string{
@@ -2989,6 +3008,10 @@ func TestRunSyncDoesNotOverridePersistedAssignmentsOnSecondSync(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunSync(1) error = %v", err)
 	}
+	firstSettings, _ := os.ReadFile(settingsPath)
+	if !bytes.Contains(firstSettings, []byte(`"default_agent": "gentle-orchestrator"`)) {
+		t.Fatalf("CLI sync did not overwrite default_agent: %s", firstSettings)
+	}
 
 	// Second sync — should still have the assignments.
 	result, err := RunSync([]string{"--agents", "opencode", "--sdd-mode", "single"})
@@ -3002,6 +3025,10 @@ func TestRunSyncDoesNotOverridePersistedAssignmentsOnSecondSync(t *testing.T) {
 	ma := result.Selection.ModelAssignments["sdd-init"]
 	if ma.ProviderID != "anthropic" || ma.ModelID != "claude-sonnet-4" {
 		t.Errorf("After second sync: ModelAssignments[sdd-init] = %+v, want anthropic/claude-sonnet-4", ma)
+	}
+	secondSettings, _ := os.ReadFile(settingsPath)
+	if !bytes.Equal(firstSettings, secondSettings) {
+		t.Fatal("CLI sync was not byte-idempotent")
 	}
 }
 

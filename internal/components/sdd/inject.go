@@ -12,6 +12,7 @@ import (
 	"github.com/gentleman-programming/gentle-ai/internal/assets"
 	"github.com/gentleman-programming/gentle-ai/internal/catalog"
 	"github.com/gentleman-programming/gentle-ai/internal/components/filemerge"
+	"github.com/gentleman-programming/gentle-ai/internal/components/opencodedefault"
 	"github.com/gentleman-programming/gentle-ai/internal/components/skills"
 	"github.com/gentleman-programming/gentle-ai/internal/model"
 	"github.com/gentleman-programming/gentle-ai/internal/opencode"
@@ -226,6 +227,14 @@ func Inject(homeDir string, adapter agents.Adapter, sddMode model.SDDModeID, opt
 	}
 	if err := validateOpenClawWorkspacePath(homeDir, adapter); err != nil {
 		return InjectionResult{}, err
+	}
+	var defaultPlan *opencodedefault.InstallPlan
+	if adapter.Agent() == model.AgentOpenCode {
+		var err error
+		defaultPlan, err = opencodedefault.PrepareInstall(adapter.SettingsPath(homeDir))
+		if err != nil {
+			return InjectionResult{}, err
+		}
 	}
 
 	var opts InjectOptions
@@ -540,6 +549,14 @@ func Inject(homeDir string, adapter agents.Adapter, sddMode model.SDDModeID, opt
 				}
 				changed = changed || profileResult.writeResult.Changed
 				mergedSettingsBytes = profileResult.merged
+			}
+			if defaultPlan != nil {
+				defaultChanged, defaultErr := defaultPlan.Apply()
+				if defaultErr != nil {
+					return InjectionResult{}, defaultErr
+				}
+				changed = changed || defaultChanged
+				files = append(files, opencodedefault.OwnershipPath(settingsPath))
 			}
 		}
 	}

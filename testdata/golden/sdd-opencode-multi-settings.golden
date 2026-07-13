@@ -263,5 +263,6 @@
       }
     }
   },
+  "default_agent": "gentle-orchestrator",
   "share": "disabled"
 }

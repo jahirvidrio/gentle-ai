@@ -22,6 +22,7 @@ import (
 	"github.com/gentleman-programming/gentle-ai/internal/components/engram"
 	"github.com/gentleman-programming/gentle-ai/internal/components/gga"
 	"github.com/gentleman-programming/gentle-ai/internal/components/mcp"
+	"github.com/gentleman-programming/gentle-ai/internal/components/opencodedefault"
 	"github.com/gentleman-programming/gentle-ai/internal/components/opencodeplugin"
 	"github.com/gentleman-programming/gentle-ai/internal/components/permissions"
 	"github.com/gentleman-programming/gentle-ai/internal/components/persona"
@@ -1444,7 +1445,7 @@ func componentPathsWithWorkspaceScoped(homeDir, workspaceDir string, scope Insta
 			}
 			if adapter.Agent() == model.AgentOpenCode {
 				if p := adapter.SettingsPath(targetDir); p != "" {
-					paths = append(paths, p)
+					paths = append(paths, p, opencodedefault.OwnershipPath(p))
 				}
 				paths = append(paths, openCodeSDDPluginPaths(targetDir)...)
 				// Shared prompt files in the selected OpenCode config scope — back these up
