@@ -208,7 +208,7 @@ var reviewFacadeCommittedTransitionHook = func(context.Context, string, string, 
 
 func RunReview(args []string, stdout io.Writer) error {
 	if len(args) == 0 || args[0] == "help" || args[0] == "-h" || args[0] == "--help" {
-		_, _ = fmt.Fprintln(stdout, "Usage: gentle-ai review <capabilities|start|finalize|validate|status|invalidate|recover|schema|bind-sdd> [flags]\n\nOrdinary review facade; repository scope, authority, canonical artifacts, and lifecycle transitions are derived by Go.")
+		_, _ = fmt.Fprintln(stdout, "Usage: gentle-ai review <capabilities|start|finalize|validate|status|invalidate|recover|reclaim|schema|bind-sdd> [flags]\n\nOrdinary review facade; repository scope, authority, canonical artifacts, and lifecycle transitions are derived by Go.")
 		_, _ = fmt.Fprintln(stdout, "Additive headless capability: gentle-ai review capture-result.")
 		return nil
 	}
@@ -291,6 +291,8 @@ func runReviewCommand(args []string, stdout io.Writer) error {
 		return RunReviewInvalidate(args[1:], stdout)
 	case "recover":
 		return RunReviewRecover(args[1:], stdout)
+	case "reclaim":
+		return RunReviewReclaim(args[1:], stdout)
 	case "schema":
 		return RunReviewSchema(args[1:], stdout)
 	case "bind-sdd":
@@ -1523,6 +1525,11 @@ func reviewAuthorityCauseCategory(report reviewtransaction.AuthorityStatusReport
 			return "reset_residue"
 		case reviewtransaction.AuthorityStatusInvalid, reviewtransaction.AuthorityStatusCollision:
 			return "record_or_graph_invalid"
+		}
+	}
+	for _, entry := range report.Entries {
+		if entry.Status == reviewtransaction.AuthorityStatusIncomplete {
+			return "incomplete_store_entry"
 		}
 	}
 	return "inventory_incomplete"

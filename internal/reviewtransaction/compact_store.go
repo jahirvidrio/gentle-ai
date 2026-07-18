@@ -18,6 +18,17 @@ import (
 )
 
 const compactRecordSchema = "gentle-ai.review-state-record/v2"
+
+// Compact store entry artifact names. Every file the compact store writes
+// under a lineage directory must be named here so the reclaim authority
+// predicate stays in sync with the store layout.
+const (
+	compactStateFileName           = "review-state.json"
+	compactReceiptFileName         = "review-receipt.json"
+	compactFinalizeJournalFileName = "finalize-attempt-journal.json"
+	// CompactReviewerResultsDir holds captured reviewer result artifacts.
+	CompactReviewerResultsDir = "reviewer-results"
+)
 const CompactTransportSchema = "gentle-ai.review-transport/v2"
 const LegacyReadOnlyErrorCode = "legacy_v1_read_only"
 
@@ -502,7 +513,7 @@ func DiscoverCompactStores(ctx context.Context, repo string) ([]CompactStore, er
 			continue
 		}
 		dir := filepath.Join(versionRoot, entry.Name())
-		if _, statErr := os.Stat(filepath.Join(dir, "review-state.json")); os.IsNotExist(statErr) {
+		if _, statErr := os.Stat(filepath.Join(dir, compactStateFileName)); os.IsNotExist(statErr) {
 			residue, readErr := os.ReadDir(dir)
 			unpublished := readErr == nil
 			for _, item := range residue {
@@ -920,10 +931,10 @@ func compactStartScopeCompatible(ctx context.Context, repo string, existing, req
 		assessment.ChangedLines == requested.OriginalChangedLines
 }
 
-func (store CompactStore) StatePath() string { return filepath.Join(store.Dir, "review-state.json") }
+func (store CompactStore) StatePath() string { return filepath.Join(store.Dir, compactStateFileName) }
 
 func (store CompactStore) ReceiptPath() string {
-	return filepath.Join(store.Dir, "review-receipt.json")
+	return filepath.Join(store.Dir, compactReceiptFileName)
 }
 
 func (store CompactStore) Load() (CompactRecord, error) {

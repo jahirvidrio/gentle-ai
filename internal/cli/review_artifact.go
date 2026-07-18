@@ -105,7 +105,7 @@ func RunReviewCaptureResult(args []string, stdout io.Writer) error {
 	return encodeReviewJSON(stdout, artifact)
 }
 func captureReviewerArtifact(storeDir string, state reviewtransaction.CompactState, order int, payload []byte) (reviewResultArtifact, error) {
-	dir := filepath.Join(storeDir, "reviewer-results")
+	dir := filepath.Join(storeDir, reviewtransaction.CompactReviewerResultsDir)
 	if err := ensureReviewerArtifactDir(dir); err != nil {
 		return reviewResultArtifact{}, err
 	}
@@ -204,7 +204,7 @@ func readVerifiedReviewerArtifact(artifact reviewResultArtifact, storeDir string
 		artifact.Lens != state.SelectedLenses[artifact.SelectedOrder] || !validReviewCapabilitySHA256(artifact.SHA256) {
 		return nil, errors.New("artifact manifest does not match frozen lineage, target, lens, and order")
 	}
-	wantPath := filepath.Join(storeDir, "reviewer-results", fmt.Sprintf("%02d-%s.json", artifact.SelectedOrder, artifact.Lens))
+	wantPath := filepath.Join(storeDir, reviewtransaction.CompactReviewerResultsDir, fmt.Sprintf("%02d-%s.json", artifact.SelectedOrder, artifact.Lens))
 	if !filepath.IsAbs(artifact.Path) || filepath.Clean(artifact.Path) != artifact.Path || artifact.Path != wantPath {
 		return nil, errors.New("artifact path is outside native transaction ownership")
 	}

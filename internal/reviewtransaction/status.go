@@ -24,6 +24,7 @@ const (
 	AuthorityStatusApproved   AuthorityStatus = "approved"
 	AuthorityStatusEscalated  AuthorityStatus = "escalated"
 	AuthorityStatusInvalid    AuthorityStatus = "invalid"
+	AuthorityStatusIncomplete AuthorityStatus = "incomplete-store-entry"
 	AuthorityStatusReset      AuthorityStatus = "reset-in-progress"
 	AuthorityStatusSuperseded AuthorityStatus = "superseded"
 	AuthorityStatusRecovered  AuthorityStatus = "recovered"
@@ -131,7 +132,7 @@ func InventoryAuthority(ctx context.Context, repo string) (AuthorityStatusReport
 	markCompactGraph(&report)
 	markMixedCollisions(&report)
 	for _, entry := range report.Entries {
-		if entry.Status == AuthorityStatusInvalid || entry.Status == AuthorityStatusReset || entry.Status == AuthorityStatusCollision {
+		if entry.Status == AuthorityStatusInvalid || entry.Status == AuthorityStatusIncomplete || entry.Status == AuthorityStatusReset || entry.Status == AuthorityStatusCollision {
 			report.Complete = false
 		}
 	}
@@ -229,6 +230,11 @@ func inventoryLineage(ctx context.Context, repo string, version AuthorityVersion
 		return entry, locks
 	}
 	if version == AuthorityVersionCompact {
+		if _, statErr := os.Stat(filepath.Join(path, compactStateFileName)); os.IsNotExist(statErr) && !compactStoreHoldsAuthority(items) {
+			entry.Status = AuthorityStatusIncomplete
+			entry.Problems = []string{"compact store entry has no review-state.json and no authoritative artifacts; quarantine it with gentle-ai review reclaim"}
+			return entry, locks
+		}
 		store := CompactStore{Dir: path, lineageID: lineage, repo: repo}
 		record, err := store.Load()
 		if err != nil {
@@ -353,7 +359,7 @@ func markCompactGraph(report *AuthorityStatusReport) {
 	children := map[string][]int{}
 	for index := range report.Entries {
 		entry := &report.Entries[index]
-		if entry.Version == AuthorityVersionCompact && entry.Status != AuthorityStatusReset &&
+		if entry.Version == AuthorityVersionCompact && entry.Status != AuthorityStatusReset && entry.Status != AuthorityStatusIncomplete &&
 			(entry.Status != AuthorityStatusInvalid || entry.State == StateInvalidated && len(entry.Problems) == 0) {
 			byLineage[entry.LineageID] = index
 		}
