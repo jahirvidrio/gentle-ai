@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 
 	"github.com/gentleman-programming/gentle-ai/internal/reviewtransaction"
@@ -154,6 +156,41 @@ func TestReviewCaptureResultConcurrentSelectedLenses(t *testing.T) {
 	wg.Wait()
 	if _, err := readFacadeReviewerArtifacts(manifests, store.Dir, record.State); err != nil {
 		t.Fatal(err)
+	}
+}
+func TestCaptureReviewerArtifactDirectorySync(t *testing.T) {
+	originalGOOS, originalSync := reviewArtifactRuntimeGOOS, syncReviewerArtifactDirectory
+	t.Cleanup(func() { reviewArtifactRuntimeGOOS, syncReviewerArtifactDirectory = originalGOOS, originalSync })
+	warning := []byte(`{"findings":[{"severity":"WARNING"}],"evidence":["unchanged"]}` + "\n")
+	cases := []struct {
+		name, goos string
+		err        error
+		wantOK     bool
+	}{
+		{"fatal", "linux", errors.New("disk sync failed"), false},
+		{"invalid", "linux", syscall.EINVAL, true},
+		{"unsupported", "linux", errors.ErrUnsupported, true},
+		{"windows permission", "windows", os.ErrPermission, true},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			storeDir := t.TempDir()
+			state := reviewtransaction.CompactState{LineageID: "lineage", InitialSnapshot: reviewtransaction.Snapshot{Identity: "target"}, SelectedLenses: []string{"review-correctness"}}
+			reviewArtifactRuntimeGOOS = func() string { return tt.goos }
+			syncReviewerArtifactDirectory = func(string) error { return tt.err }
+			artifact, err := captureReviewerArtifact(storeDir, state, 0, warning)
+			path := filepath.Join(storeDir, "reviewer-results", "00-review-correctness.json")
+			if !tt.wantOK {
+				if _, statErr := os.Stat(path); err == nil || artifact != (reviewResultArtifact{}) || !os.IsNotExist(statErr) {
+					t.Fatalf("fatal sync returned artifact or retained publication: artifact=%+v err=%v", artifact, err)
+				}
+				return
+			}
+			got, readErr := os.ReadFile(path)
+			if err != nil || readErr != nil || !bytes.Equal(got, warning) {
+				t.Fatalf("compatible sync changed WARNING result: capture=%v read=%v got=%q", err, readErr, got)
+			}
+		})
 	}
 }
 func newArtifactReview(t *testing.T, high bool) (string, ReviewFacadeStartResult, reviewtransaction.CompactStore, reviewtransaction.CompactRecord) {

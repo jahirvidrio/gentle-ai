@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 
 	"github.com/gentleman-programming/gentle-ai/internal/reviewtransaction"
 )
@@ -33,6 +34,18 @@ type reviewResultArtifact struct {
 }
 
 var reviewArtifactAfterLstat = func() {}
+var reviewArtifactRuntimeGOOS = func() string { return runtime.GOOS }
+var syncReviewerArtifactDirectory = func(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	if err := directory.Sync(); err != nil {
+		_ = directory.Close()
+		return err
+	}
+	return directory.Close()
+}
 
 func RunReviewCaptureResult(args []string, stdout io.Writer) error {
 	flags := newReviewFlagSet("review capture-result", stdout, "Capture one strict reviewer result in native authority and emit its bound manifest.")
@@ -133,6 +146,14 @@ func captureReviewerArtifact(storeDir string, state reviewtransaction.CompactSta
 			return artifact, nil
 		}
 		return reviewResultArtifact{}, fmt.Errorf("publish reviewer result atomically: %w", err)
+	}
+	if err := syncReviewerArtifactDirectory(dir); err != nil {
+		unsupported := errors.Is(err, syscall.EINVAL) || errors.Is(err, errors.ErrUnsupported) ||
+			reviewArtifactRuntimeGOOS() == "windows" && errors.Is(err, os.ErrPermission)
+		if !unsupported {
+			removeOwnedArtifact(path, owned)
+			return reviewResultArtifact{}, fmt.Errorf("sync reviewer result directory: %w", err)
+		}
 	}
 	if _, err := readVerifiedReviewerArtifact(artifact, storeDir, state); err != nil {
 		removeOwnedArtifact(path, owned)
