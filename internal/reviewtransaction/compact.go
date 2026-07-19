@@ -54,6 +54,46 @@ type CompactState struct {
 	Recovery                  *CompactRecoveryProvenance   `json:"recovery,omitempty"`
 	CorrectionAttempts        []CompactCorrectionAttempt   `json:"correction_attempts,omitempty"`
 	CumulativeCorrectionLines int                          `json:"cumulative_correction_lines,omitempty"`
+	ResultDispositions        []CompactResultDisposition   `json:"result_dispositions,omitempty"`
+}
+
+// ResultDispositionClass names which class of failure makes one preserved
+// reviewer result inapplicable to the frozen candidate. The two classes are
+// deliberately distinct: a transport or syntax failure says the payload never
+// decoded, while a wrong-target failure says a decodable payload described a
+// candidate that is not the frozen one. Both are recorded verbatim so an
+// auditor can tell which claim was actually proven.
+type ResultDispositionClass string
+
+const (
+	ResultDispositionTransportSyntax ResultDispositionClass = "transport_syntax"
+	ResultDispositionWrongTarget     ResultDispositionClass = "wrong_target"
+)
+
+// CompactResultDisposition records one audited refusal of a preserved reviewer
+// result as candidate-inapplicable. It binds the exact lens, selected order,
+// frozen target identity, and preserved-artifact digest it dispositions, and
+// it never carries findings, evidence, or any other admissible review content:
+// a disposition terminally escalates a lineage, it never contributes to one.
+type CompactResultDisposition struct {
+	Lens           string                 `json:"lens"`
+	SelectedOrder  int                    `json:"selected_order"`
+	TargetIdentity string                 `json:"target_identity"`
+	ArtifactDigest string                 `json:"artifact_digest"`
+	Class          ResultDispositionClass `json:"class"`
+	// PayloadDecodable records the decodability the disposition actually
+	// observed in the preserved bytes. It is what makes the two classes
+	// mutually exclusive in persisted shape: transport_syntax may only be
+	// recorded for a payload that did not decode, and wrong_target only for one
+	// that did, so no stored record can claim the stronger semantic class over
+	// a payload that never decoded at all.
+	PayloadDecodable        bool      `json:"payload_decodable,omitempty"`
+	Diagnostic              string    `json:"diagnostic"`
+	AbsentPaths             []string  `json:"absent_paths,omitempty"`
+	Reason                  string    `json:"reason"`
+	Actor                   string    `json:"actor"`
+	DisposedAt              time.Time `json:"disposed_at"`
+	MaintainerAuthorization string    `json:"maintainer_authorization"`
 }
 
 type CompactCorrectionAttempt struct {
@@ -177,6 +217,9 @@ func (state CompactState) Validate() error {
 		default:
 			return errors.New("compact recovery disposition is invalid")
 		}
+	}
+	if err := validateCompactResultDispositions(state); err != nil {
+		return err
 	}
 	if state.State != StateInvalidated && state.InvalidationEvidence != nil {
 		return errors.New("only an invalidated compact state may contain invalidation evidence")
@@ -339,6 +382,18 @@ func validateCompactSnapshotMetadata(snapshot Snapshot) error {
 
 func validateCompactFindings(state CompactState) error {
 	if state.State == StateReviewing || state.State == StateInvalidated {
+		return nil
+	}
+	// A lineage terminally escalated by an audited reviewer-result disposition
+	// never completed its review, so by construction it holds no lens results
+	// to require. The exemption is exactly as narrow as that shape: it demands
+	// that no review content was frozen at all, so it can never excuse a
+	// partially completed review from the ordinary every-lens requirement.
+	if state.State == StateEscalated && len(state.ResultDispositions) > 0 {
+		if len(state.LensResults) != 0 || len(state.Findings) != 0 || len(state.Classifications) != 0 ||
+			len(state.Outcomes) != 0 || len(state.FixFindingIDs) != 0 || state.EvidenceHash != "" {
+			return errors.New("a reviewer-result-dispositioned compact state must hold no frozen review content")
+		}
 		return nil
 	}
 	if len(state.LensResults) != len(state.SelectedLenses) {
@@ -702,8 +757,67 @@ func (state *CompactState) invalidateApproved(evaluation NativeGateEvaluation) e
 	return state.Validate()
 }
 
+// validateCompactResultDispositions enforces the persisted shape of audited
+// reviewer-result dispositions. Only a terminally escalated authority may
+// carry them, each binds a distinct selected lens/order pair on the frozen
+// target, and each records the class it actually proved.
+func validateCompactResultDispositions(state CompactState) error {
+	if len(state.ResultDispositions) == 0 {
+		return nil
+	}
+	if state.State != StateEscalated {
+		return errors.New("only a terminally escalated compact state may record reviewer result dispositions")
+	}
+	orders := make(map[int]struct{}, len(state.ResultDispositions))
+	for _, disposition := range state.ResultDispositions {
+		if disposition.SelectedOrder < 0 || disposition.SelectedOrder >= len(state.SelectedLenses) ||
+			state.SelectedLenses[disposition.SelectedOrder] != disposition.Lens {
+			return errors.New("reviewer result disposition does not bind a selected lens and order")
+		}
+		if _, duplicate := orders[disposition.SelectedOrder]; duplicate {
+			return errors.New("reviewer result disposition order is recorded twice")
+		}
+		orders[disposition.SelectedOrder] = struct{}{}
+		if disposition.TargetIdentity != state.InitialSnapshot.Identity || !validSHA256(disposition.ArtifactDigest) {
+			return errors.New("reviewer result disposition does not bind the frozen target and preserved artifact digest")
+		}
+		if strings.TrimSpace(disposition.Diagnostic) == "" || strings.TrimSpace(disposition.Reason) == "" ||
+			strings.TrimSpace(disposition.Actor) == "" || strings.TrimSpace(disposition.MaintainerAuthorization) == "" ||
+			disposition.DisposedAt.IsZero() {
+			return errors.New("reviewer result disposition requires a diagnostic, reason, actor, authorization, and timestamp")
+		}
+		switch disposition.Class {
+		case ResultDispositionTransportSyntax:
+			if len(disposition.AbsentPaths) != 0 {
+				return errors.New("transport/syntax reviewer result disposition carries no wrong-target path evidence")
+			}
+			if disposition.PayloadDecodable {
+				return errors.New("transport/syntax reviewer result disposition must record a payload that did not decode")
+			}
+		case ResultDispositionWrongTarget:
+			absent, err := canonicalPaths(disposition.AbsentPaths)
+			if err != nil || len(absent) == 0 || !equalStrings(absent, disposition.AbsentPaths) {
+				return errors.New("wrong-target reviewer result disposition requires canonical absent-path evidence")
+			}
+			for _, path := range absent {
+				for _, candidate := range state.InitialSnapshot.Paths {
+					if candidate == path {
+						return errors.New("wrong-target reviewer result disposition cites a path inside the frozen candidate")
+					}
+				}
+			}
+			if !disposition.PayloadDecodable {
+				return errors.New("wrong-target reviewer result disposition must record a payload that actually decoded")
+			}
+		default:
+			return errors.New("invalid reviewer result disposition class")
+		}
+	}
+	return nil
+}
+
 func compactPristineReviewing(state CompactState) bool {
-	return state.State == StateReviewing && snapshotsEqual(state.CurrentSnapshot, state.InitialSnapshot) &&
+	return state.State == StateReviewing && len(state.ResultDispositions) == 0 && snapshotsEqual(state.CurrentSnapshot, state.InitialSnapshot) &&
 		len(state.LensResults) == 0 && len(state.Findings) == 0 && len(state.Classifications) == 0 && len(state.Outcomes) == 0 &&
 		len(state.FixFindingIDs) == 0 && len(state.FollowUps) == 0 && state.ProposedCorrectionLines == nil && state.ActualCorrectionLines == nil &&
 		state.FixDeltaHash == EmptyFixDeltaHash && state.OriginalCriteria == nil && state.CorrectionRegression == nil && state.EvidenceHash == "" && state.InvalidationReason == "" &&
