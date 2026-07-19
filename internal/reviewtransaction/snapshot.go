@@ -912,10 +912,26 @@ func (err *GitCommandError) Error() string {
 
 func (err *GitCommandError) Unwrap() error { return err.Cause }
 
+// GitProcessControlError reports that a git subprocess could not be started or
+// its process tree could not be brought under control before it produced any
+// result, e.g. Windows job-object or NtResumeProcess failures. It carries the
+// underlying cause so failure envelopes stay diagnosable.
+type GitProcessControlError struct {
+	Args  []string
+	Cause error
+}
+
+func (err *GitProcessControlError) Error() string {
+	return fmt.Sprintf("git %s subprocess start or process-tree control failed: %v", strings.Join(err.Args, " "), err.Cause)
+}
+
+func (err *GitProcessControlError) Unwrap() error { return err.Cause }
+
 var localGitCommandTimeout = 15 * time.Second
 var remoteGitCommandTimeout = 20 * time.Second
 var gitCommandWaitDelay = time.Second
 var gitCommandContext = exec.CommandContext
+var gitProcessTreeStarter = startGitProcessTree
 
 func runGit(ctx context.Context, repo string, extraEnv []string, stdin []byte, args ...string) ([]byte, error) {
 	remote := len(args) > 0 && args[0] == "ls-remote"
@@ -934,7 +950,8 @@ func runGit(ctx context.Context, repo string, extraEnv []string, stdin []byte, a
 	}
 	var buffer bytes.Buffer
 	command.Stdout, command.Stderr = &buffer, &buffer
-	release, err := startGitProcessTree(command)
+	release, startErr := gitProcessTreeStarter(command)
+	err := startErr
 	if err == nil {
 		released := make(chan struct{})
 		stopRelease := context.AfterFunc(commandContext, func() { _ = release(); close(released) })
@@ -966,6 +983,9 @@ func runGit(ctx context.Context, repo string, extraEnv []string, stdin []byte, a
 			return nil, &GitCommandTimeoutError{
 				Args: append([]string{}, args...), Timeout: timeout, Remote: remote, Aggregate: aggregate, Cause: cause,
 			}
+		}
+		if startErr != nil {
+			return nil, &GitProcessControlError{Args: append([]string{}, args...), Cause: startErr}
 		}
 		exitCode := -1
 		var exitErr *exec.ExitError

@@ -319,12 +319,21 @@ func TestNegotiatedBindSDDTimeoutBeforePublicationIsRetryable(t *testing.T) {
 
 func TestNegotiatedGitFailuresAreTypedNonAmplifyingAndPreMutation(t *testing.T) {
 	for _, tt := range []struct {
-		name string
-		err  error
-		code string
+		name      string
+		err       error
+		code      string
+		causeText string
 	}{
 		{name: "timeout", err: &reviewtransaction.GitCommandTimeoutError{Timeout: 15 * time.Second}, code: "git_command_timeout"},
 		{name: "exit", err: &reviewtransaction.GitCommandError{ExitCode: 128}, code: "git_command_failed"},
+		{
+			name: "process control",
+			err: &reviewtransaction.GitProcessControlError{
+				Args: []string{"read-tree", "--empty"}, Cause: errors.New("job object assignment denied (0xC0000022)"),
+			},
+			code:      "git_command_failed",
+			causeText: "job object assignment denied (0xC0000022)",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			failure := newReviewIntegrationFailure("review.start", []string{"--lineage", "review-git-boundary"}, tt.err)
@@ -332,7 +341,57 @@ func TestNegotiatedGitFailuresAreTypedNonAmplifyingAndPreMutation(t *testing.T) 
 				failure.RetrySafe || failure.Replayability != reviewtransaction.ReplayabilityManualActionRequired || failure.NextAction != "stop" {
 				t.Fatalf("git failure = %#v", failure)
 			}
+			if tt.causeText != "" && !strings.Contains(failure.Message, tt.causeText) {
+				t.Fatalf("git failure message masks cause: %q", failure.Message)
+			}
 		})
+	}
+}
+
+func TestNegotiatedStatusProcessControlFailureIsTypedAndDiagnosable(t *testing.T) {
+	originalRunner := reviewFacadeCommandRunner
+	t.Cleanup(func() { reviewFacadeCommandRunner = originalRunner })
+	reviewFacadeCommandRunner = func(context.Context, []string, io.Writer) error {
+		return fmt.Errorf("inventory review authority: %w", &reviewtransaction.GitProcessControlError{
+			Args: []string{"status", "--porcelain=v2"}, Cause: errors.New("NtResumeProcess status 0xC0000022"),
+		})
+	}
+	var output bytes.Buffer
+	err := RunReview([]string{"status", "--contract", ReviewIntegrationContractV1}, &output)
+	if err == nil {
+		t.Fatal("negotiated status with process-control failure succeeded")
+	}
+	failure := decodeReviewIntegrationFailure(t, output.Bytes())
+	if failure.Operation != "review.status" || failure.Code != "git_command_failed" || failure.Phase != "pre_native" ||
+		failure.MutationOutcome != ReviewMutationNotStarted || failure.RetrySafe ||
+		failure.Replayability != reviewtransaction.ReplayabilityManualActionRequired || failure.NextAction != "stop" {
+		t.Fatalf("negotiated status process-control failure = %#v", failure)
+	}
+	if !strings.Contains(failure.Message, "NtResumeProcess status 0xC0000022") {
+		t.Fatalf("process-control envelope masks cause: %q", failure.Message)
+	}
+}
+
+func TestNegotiatedReadOnlyCatchAllStaysContentFreeAndNeverAbsorbsProcessControl(t *testing.T) {
+	leaky := fmt.Errorf("assess negotiated review target: %w",
+		errors.New("open /home/user/.git/review-authority/receipt.json: permission denied"))
+	failure := newReviewIntegrationFailure("review.status", nil, leaky)
+	if failure.Code != "operation_failed" || failure.Phase != "pre_native" ||
+		failure.MutationOutcome != ReviewMutationNotStarted || !failure.RetrySafe ||
+		failure.Replayability != reviewtransaction.ReplayabilityNotReplayable || failure.NextAction != "retry" {
+		t.Fatalf("read-only catch-all failure = %#v", failure)
+	}
+	if failure.Message != "The negotiated read-only review operation failed safely." {
+		t.Fatalf("read-only catch-all message is not content-free: %q", failure.Message)
+	}
+
+	control := fmt.Errorf("inventory review authority: %w", &reviewtransaction.GitProcessControlError{
+		Args: []string{"status", "--porcelain=v2"}, Cause: errors.New("NtResumeProcess status 0xC0000022"),
+	})
+	typed := newReviewIntegrationFailure("review.status", nil, control)
+	if typed.Code != "git_command_failed" || typed.Phase != "pre_native" || typed.RetrySafe ||
+		typed.Replayability != reviewtransaction.ReplayabilityManualActionRequired || typed.NextAction != "stop" {
+		t.Fatalf("process-control failure reached the catch-all: %#v", typed)
 	}
 }
 
