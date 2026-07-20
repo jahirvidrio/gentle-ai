@@ -270,6 +270,100 @@ func TestCompactRecoveryContractsGenesisPaths(t *testing.T) {
 	}
 }
 
+// TestCompactRecoveryAddsGenesisPath pins the boundary between a genuine scope
+// expansion of the frozen work and an entirely unrelated candidate. Expansion
+// means the live scope still overlaps genesis and reaches past it. A live scope
+// disjoint from genesis is not an expansion of that lineage at all: it is
+// different work that happens to share a base tree, which is the ordinary case
+// for two Git worktrees of the same repository. Treating it as expansion let a
+// stale correction_required lineage capture an unrelated candidate, because the
+// very first live path already sits outside genesis.
+func TestCompactRecoveryAddsGenesisPath(t *testing.T) {
+	predecessor := CompactState{GenesisPaths: []string{"a.go", "b.go", "c.go"}}
+	tests := []struct {
+		name string
+		live []string
+		want bool
+	}{
+		{name: "superset", live: []string{"a.go", "b.go", "c.go", "d.go"}, want: true},
+		{name: "overlap reaching outside genesis", live: []string{"a.go", "x.go"}, want: true},
+		{name: "disjoint paths", live: []string{"x.go", "y.go"}, want: false},
+		{name: "equal set", live: []string{"a.go", "b.go", "c.go"}, want: false},
+		{name: "strict subset", live: []string{"a.go", "c.go"}, want: false},
+		{name: "empty live diff", live: []string{}, want: false},
+		{name: "non-canonical live paths", live: []string{"x.go", "a.go"}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := compactRecoveryAddsGenesisPath(predecessor, Snapshot{Paths: tt.live}); got != tt.want {
+				t.Fatalf("compactRecoveryAddsGenesisPath(%v) = %v, want %v", tt.live, got, tt.want)
+			}
+		})
+	}
+	if compactRecoveryAddsGenesisPath(CompactState{GenesisPaths: []string{"b.go", "a.go"}}, Snapshot{Paths: []string{"a.go", "x.go"}}) {
+		t.Fatal("non-canonical genesis paths must not qualify as expansion")
+	}
+	if compactRecoveryAddsGenesisPath(CompactState{}, Snapshot{Paths: []string{"x.go"}}) {
+		t.Fatal("empty genesis scope must not be expanded by an unrelated candidate")
+	}
+}
+
+// TestCorrectionRequiredLineageDoesNotCaptureDisjointCandidate reproduces the
+// incident that motivated the retention rule. A stale correction_required
+// lineage frozen over tracked.txt must not capture a candidate that touches an
+// entirely different file, even though both share a base tree and projection.
+// That sharing is unavoidable in practice: Git worktrees of one repository
+// share the review store under the common dir, so a store holding several stuck
+// lineages would otherwise bind whichever one enumerated first to unrelated
+// work, and report that lineage's frozen scope as if it were the caller's.
+func TestCorrectionRequiredLineageDoesNotCaptureDisjointCandidate(t *testing.T) {
+	repo, predecessor, _, _ := correctionScopeRecoveryFixture(t, "review-correction-disjoint")
+
+	// Retire the frozen scope from the live diff and introduce unrelated work,
+	// leaving live paths disjoint from genesis rather than wider than it.
+	writeSnapshotFile(t, repo, "tracked.txt", "base\n")
+	writeSnapshotFile(t, repo, "unrelated.go", "package unrelated\n")
+	target := Target{Kind: TargetCurrentChanges, IntendedUntracked: []string{"unrelated.go"}}
+
+	requested := newCompactStartStateForTarget(t, repo, "review-correction-disjoint-new", target)
+	if got := requested.InitialSnapshot.Paths; len(got) != 1 || got[0] != "unrelated.go" {
+		t.Fatalf("candidate paths = %v, want exactly [unrelated.go]", got)
+	}
+	// The shared-store gates the classifier applies before scope must still
+	// pass, otherwise this would prove nothing about the retention rule.
+	if requested.InitialSnapshot.BaseTree != predecessor.InitialSnapshot.BaseTree {
+		t.Fatalf("fixture no longer shares a base tree with the predecessor")
+	}
+
+	started, err := StartCompactAuthority(context.Background(), repo, CompactStartRequest{State: requested})
+	if err != nil {
+		t.Fatalf("StartCompactAuthority() error = %v", err)
+	}
+	if started.Action != CompactStartCreated {
+		t.Fatalf("disjoint candidate start action = %q, want %q", started.Action, CompactStartCreated)
+	}
+	if started.Record.State.LineageID != requested.LineageID {
+		t.Fatalf("start bound lineage %q, want the caller's %q", started.Record.State.LineageID, requested.LineageID)
+	}
+	if got := started.Record.State.InitialSnapshot.Identity; got != requested.InitialSnapshot.Identity {
+		t.Fatalf("start reported target identity %q, want the caller's %q", got, requested.InitialSnapshot.Identity)
+	}
+
+	// The predecessor keeps its own authority: it is neither advanced nor
+	// consumed by unrelated work starting alongside it.
+	predecessorStore, err := CompactAuthoritativeStore(context.Background(), repo, predecessor.LineageID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, err := predecessorStore.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.State.State != StateCorrectionRequired || after.State.Generation != predecessor.Generation {
+		t.Fatalf("predecessor authority changed: state=%q generation=%d", after.State.State, after.State.Generation)
+	}
+}
+
 func recoveryAuthorizationFixture(request CompactRecoveryRequest) string {
 	return "gentle-ai.review-recovery-authorization/v1\npredecessor_lineage=" + request.PredecessorLineageID +
 		"\npredecessor_revision=" + request.ExpectedPredecessorRevision + "\ntarget_identity=" + request.Successor.InitialSnapshot.Identity +

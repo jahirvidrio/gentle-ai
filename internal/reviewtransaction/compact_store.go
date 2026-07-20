@@ -420,12 +420,22 @@ func compactRecoveryAddsGenesisPath(predecessor CompactState, live Snapshot) boo
 	for _, path := range genesis {
 		known[path] = struct{}{}
 	}
+	retained := false
+	reaches := false
 	for _, path := range paths {
-		if _, exists := known[path]; !exists {
-			return true
+		if _, exists := known[path]; exists {
+			retained = true
+			continue
 		}
+		reaches = true
 	}
-	return false
+	// An expansion must still be the frozen work: it retains at least one
+	// genesis path and reaches past the set. A live scope disjoint from genesis
+	// is unrelated work, not a wider view of this lineage, so it must not be
+	// admitted here. Worktrees of one repository share the review store and a
+	// base tree, so without the retention test an unrelated candidate would be
+	// captured by whichever stale lineage happened to be enumerated first.
+	return retained && reaches
 }
 
 // compactRecoveryContractsGenesisPaths reports whether the live repository
