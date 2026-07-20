@@ -58,6 +58,11 @@ func TestValidatingEvidenceCollectionUnblocksFinalizeAndPreCommit(t *testing.T) 
 	if err := RunReviewFacadeFinalize([]string{"--contract", ReviewIntegrationContractV1, "--next-transition", "--cwd", repo, "--lineage", started.LineageID, "--captured-evidence"}, &terminal); err != nil {
 		t.Fatal(err)
 	}
+	var finalized ReviewIntegrationFinalizeResult
+	decodeStrictReviewJSON(t, decodeReviewOperationEnvelope(t, terminal.Bytes()).Result, &finalized)
+	if finalized.State != reviewtransaction.StateApproved {
+		t.Fatalf("captured evidence finalize state = %q, want approved", finalized.State)
+	}
 	runReviewCLIGit(t, repo, "add", "tracked.txt")
 	if err := RunReview([]string{"validate", "--cwd", repo, "--lineage", started.LineageID, "--gate", string(reviewtransaction.GatePreCommit)}, &bytes.Buffer{}); err != nil {
 		t.Fatalf("pre-commit after captured evidence: %v", err)

@@ -952,6 +952,9 @@ func runReviewFacadeFinalize(ctx context.Context, args []string, stdout io.Write
 		}
 	}
 	terminalAtEntry := facadeTerminalState(state.State)
+	if terminalAtEntry && !facadeFinalizeReplayInputsEmpty(resultPaths, resultArtifacts, *capturedResults, *capturedEvidence, *validationPath, *refuterPath, *evidencePath, *correctionLines, *failed, *tracePath) {
+		return errors.New("terminal review finalize accepts no review inputs; exact replay requires only --lineage")
+	}
 	if state.State != reviewtransaction.StateReviewing && (len(resultArtifacts) != 0 || len(resultPaths) != 0) {
 		pending, pendingErr := store.PendingFinalizeAttempt()
 		if pendingErr != nil {
@@ -986,14 +989,8 @@ func runReviewFacadeFinalize(ctx context.Context, args []string, stdout io.Write
 			if terminalPending == nil {
 				terminalComplete = true
 			}
-			if terminalPending != nil && !facadeFinalizeReplayInputsEmpty(resultPaths, resultArtifacts, *capturedResults, *validationPath, *refuterPath, *evidencePath, *correctionLines, *failed, *tracePath) {
-				return errors.New("terminal review finalize accepts no review inputs; exact replay requires only --lineage")
-			}
 		}
 		if !terminalReceiptExists {
-			if !facadeFinalizeReplayInputsEmpty(resultPaths, resultArtifacts, *capturedResults, *validationPath, *refuterPath, *evidencePath, *correctionLines, *failed, *tracePath) {
-				return errors.New("terminal review finalize accepts no review inputs; exact receipt replay requires only --lineage")
-			}
 			if *lineage != state.LineageID || strings.TrimSpace(*lineage) != *lineage {
 				return errors.New("receipt publication replay requires the exact explicit --lineage")
 			}
@@ -1320,8 +1317,8 @@ func facadeTerminalState(state reviewtransaction.State) bool {
 	return state == reviewtransaction.StateApproved || state == reviewtransaction.StateEscalated
 }
 
-func facadeFinalizeReplayInputsEmpty(results, artifacts []string, captured bool, validation, refuter, evidence string, correctionLines int, failed bool, trace string) bool {
-	return len(results) == 0 && len(artifacts) == 0 && !captured && strings.TrimSpace(validation) == "" && strings.TrimSpace(refuter) == "" &&
+func facadeFinalizeReplayInputsEmpty(results, artifacts []string, capturedResults, capturedEvidence bool, validation, refuter, evidence string, correctionLines int, failed bool, trace string) bool {
+	return len(results) == 0 && len(artifacts) == 0 && !capturedResults && !capturedEvidence && strings.TrimSpace(validation) == "" && strings.TrimSpace(refuter) == "" &&
 		strings.TrimSpace(evidence) == "" && correctionLines == 0 && !failed && strings.TrimSpace(trace) == ""
 }
 
