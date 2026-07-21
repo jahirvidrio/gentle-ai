@@ -21,6 +21,13 @@
 > **RDD is unstable.** Receipt-Driven Development started in `gentle-ai` `v1.47.0`. Every release from `v1.47.0` onward is part of the RDD development line and may change while remaining issues are fixed.
 >
 > For a stable installation without RDD, use the last version before RDD, `v1.46.0`:
+>
+> Homebrew (preferred for macOS and Linux users):
+> ```bash
+> brew install gentleman-programming/homebrew-tap/gentle-ai@1.46.0
+> ```
+>
+> Or from source (requires Go):
 > ```bash
 > go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v1.46.0
 > ```
