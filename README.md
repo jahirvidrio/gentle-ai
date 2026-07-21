@@ -18,13 +18,13 @@
 ---
 
 > [!IMPORTANT]
-> **RDD version policy:** Receipt-Driven Development started in `gentle-ai` `v1.47.0`. The stable pre-RDD baseline is `v1.46.0`; the latest RDD release is `v2.1.11`.
+> **RDD is unstable.** Receipt-Driven Development started in `gentle-ai` `v1.47.0`. Every release from `v1.47.0` onward is part of the RDD development line and may change while remaining issues are fixed.
 >
-> To try RDD, install the latest release explicitly:
+> For a stable installation without RDD, use the last version before RDD, `v1.46.0`:
 > ```bash
-> go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v2.1.11
+> go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v1.46.0
 > ```
-> Use `@main` only for unreleased development changes. See the [full RDD version policy](docs/quickstart.md#version-policy).
+> To test the latest released RDD build, use `@latest`. Use `@main` only for unreleased development changes. See the [full RDD version policy](docs/quickstart.md#version-policy).
 
 ## What It Does
 
@@ -119,10 +119,10 @@ brew trust --formula gentleman-programming/tap/gentle-ai  # one-time, for Homebr
 brew install gentle-ai
 ```
 
-**Go install (any platform with Go 1.25.10+)**
+**Go install, stable pin (any platform with Go 1.25.10+)**
 
 ```bash
-go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@latest
+go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v1.46.0
 ```
 
 **Scoop (Windows)** — this is a manual-update path; update it with `scoop update gentle-ai`.
@@ -152,21 +152,21 @@ $env:GENTLE_AI_CHANNEL="beta"; irm https://raw.githubusercontent.com/Gentleman-P
 
 ### RDD version policy
 
-Receipt-Driven Development (RDD) started in `gentle-ai` `v1.47.0` on 2026-07-10, with the first bounded native review transactions. The stable pre-RDD baseline is therefore pinned to `v1.46.0`. The negotiated public review contract was published later in `v2.1.6`.
+Receipt-Driven Development (RDD) started in `gentle-ai` `v1.47.0` on 2026-07-10, with the first bounded native review transactions. Every release from `v1.47.0` onward is part of the unstable RDD development line. New releases will continue improving RDD until the project declares the line stable. The stable version for normal use without RDD is the last release before RDD, `v1.46.0`.
 
-Use the latest release, currently `v2.1.11`, when you want to try RDD. Use `@main` only when you explicitly want unreleased changes after that release.
+Use `@latest` when you want to try the latest released RDD build. Use `@main` only when you explicitly want unreleased RDD development changes. The negotiated public review contract was published in `v2.1.6`.
 
-**Stable pre-RDD baseline (`v1.46.0`)**
+**Stable version (`v1.46.0`)**
 
 ```bash
 go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v1.46.0
 gentle-ai version
 ```
 
-**Latest RDD release (`v2.1.11`)**
+**Latest released RDD build (unstable)**
 
 ```bash
-go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@v2.1.11
+go install github.com/gentleman-programming/gentle-ai/cmd/gentle-ai@latest
 gentle-ai version
 ```
 
