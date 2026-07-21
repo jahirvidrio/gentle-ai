@@ -14,6 +14,7 @@ const (
 	compactInspectionEntryMissing    = "missing_compact_state"
 	compactInspectionEntryUnreadable = "unreadable_compact_state"
 	compactInspectionEntryMalformed  = "malformed_compact_state"
+	compactInspectionEntryUnexpected = "unexpected_authority_root_entry"
 )
 
 type CompactRecoveryInspectionReport struct {
@@ -46,11 +47,16 @@ type CompactRecoveryEntryDiagnostic struct {
 	Problem   string `json:"problem"`
 }
 
-// InspectCompactRecoveryEdges is lock-free and read-only; Complete covers the initial directory pass, not an atomic snapshot, so mutating consumers must re-read revisions under lock/CAS.
+// InspectCompactRecoveryEdges is read-only and coordinates each record read
+// against authority maintenance. Complete covers the initial directory pass,
+// not an atomic snapshot, so mutating consumers must re-read under lock/CAS.
 func InspectCompactRecoveryEdges(ctx context.Context, repo string) (CompactRecoveryInspectionReport, error) {
 	report := CompactRecoveryInspectionReport{Complete: true, Valid: true, Edges: []CompactRecoveryEdgeInspection{}, EntryDiagnostics: []CompactRecoveryEntryDiagnostic{}}
 	base, root, err := reviewAuthorityRoot(ctx, repo)
 	if err != nil {
+		return report, err
+	}
+	if err := ensureNoPreparedCompactBatchReconciliation(base); err != nil {
 		return report, err
 	}
 	versionRoot := filepath.Join(base, "v2")
@@ -67,6 +73,11 @@ func InspectCompactRecoveryEdges(ctx context.Context, repo string) (CompactRecov
 			return report, err
 		}
 		if !entry.IsDir() {
+			if entry.Name() != "LOCK" {
+				report.EntryDiagnostics = append(report.EntryDiagnostics, CompactRecoveryEntryDiagnostic{
+					LineageID: entry.Name(), Problem: compactInspectionEntryUnexpected,
+				})
+			}
 			continue
 		}
 		report.Totals.CompactEntries++
@@ -82,6 +93,13 @@ func InspectCompactRecoveryEdges(ctx context.Context, repo string) (CompactRecov
 		report.Totals.LoadedEntries++
 		records[record.State.LineageID] = record
 	}
+	return inspectCompactRecoveryRecordSet(ctx, records, report)
+}
+
+// inspectCompactRecoveryRecordSet applies the canonical all-edge inspection to
+// an already loaded record set. Read-only consumers use it to prove that an
+// inspection still describes the exact records they hold.
+func inspectCompactRecoveryRecordSet(ctx context.Context, records map[string]CompactRecord, report CompactRecoveryInspectionReport) (CompactRecoveryInspectionReport, error) {
 	for lineage, successor := range records {
 		if err := ctx.Err(); err != nil {
 			return report, err
