@@ -17,6 +17,9 @@
       "hidden": true,
       "mode": "subagent",
       "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow",
         "task": "deny"
       },
       "prompt": "You are the general fallback sub-agent. When handling unstructured auxiliary tasks:\n- Read relevant codebase context before drawing conclusions.\n- Perform empirical verification of all claims and code execution paths.\n- Keep changes minimal and targeted when editing files.\n- Do NOT launch child sub-agents autonomously.\n\n\u003c!-- gentle-ai:agent-language-contract --\u003e\n## Artifact Language Contract\n\nGenerated artifacts (code, comments, UI copy, docs, specs, tests, commit messages, memory entries) default to English. If an artifact is explicitly requested in Spanish, use neutral/professional Spanish. Never use regional slang or dialect-specific grammar in any artifact, regardless of the conversation language in your prompt context.\n\nBefore any Write/Edit whose content is an artifact, re-verify these artifact language rules.\n\u003c!-- /gentle-ai:agent-language-contract --\u003e\n"
@@ -58,7 +61,11 @@
       "description": "Surgical fix agent for judgment-day protocol",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "You are a judgment-day surgical fix agent. Execute the fix instructions provided in the task prompt exactly. Do NOT delegate further. Fix ONLY the confirmed issues listed — do NOT refactor beyond what is strictly needed.\n\n\u003c!-- gentle-ai:agent-language-contract --\u003e\n## Artifact Language Contract\n\nGenerated artifacts (code, comments, UI copy, docs, specs, tests, commit messages, memory entries) default to English. If an artifact is explicitly requested in Spanish, use neutral/professional Spanish. Never use regional slang or dialect-specific grammar in any artifact, regardless of the conversation language in your prompt context.\n\nBefore any Write/Edit whose content is an artifact, re-verify these artifact language rules.\n\u003c!-- /gentle-ai:agent-language-contract --\u003e\n"
     },
     "jd-judge-a": {
@@ -152,49 +159,77 @@
       "description": "Implement code changes from task definitions",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-apply.md}"
     },
     "sdd-archive": {
       "description": "Archive completed change artifacts",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-archive.md}"
     },
     "sdd-design": {
       "description": "Create technical design from proposals",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-design.md}"
     },
     "sdd-explore": {
       "description": "Investigate codebase and think through ideas",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-explore.md}"
     },
     "sdd-init": {
       "description": "Bootstrap SDD context and project configuration",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-init.md}"
     },
     "sdd-onboard": {
       "description": "Guide user through a complete SDD cycle using their real codebase",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-onboard.md}"
     },
     "sdd-propose": {
       "description": "Create change proposals from explorations",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-propose.md}"
     },
     "sdd-research": {
@@ -213,21 +248,33 @@
       "description": "Write detailed specifications from proposals",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-spec.md}"
     },
     "sdd-tasks": {
       "description": "Break down specs and designs into implementation tasks",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-tasks.md}"
     },
     "sdd-verify": {
       "description": "Validate implementation against specs",
       "hidden": true,
       "mode": "subagent",
-      "permission": {},
+      "permission": {
+        "bash": "allow",
+        "edit": "allow",
+        "read": "allow"
+      },
       "prompt": "{file:./prompts/sdd/sdd-verify.md}"
     }
   },
